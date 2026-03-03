@@ -1,5 +1,6 @@
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useMutation, useQuery } from '@tanstack/react-query';
+import { useRouter } from 'expo-router';
 import React, { useEffect, useRef, useState } from 'react';
 import { Animated, TouchableOpacity } from 'react-native';
 import { useTheme } from 'styled-components/native';
@@ -175,6 +176,7 @@ type Message = {
 
 export default function ModernAdvisorScreen() {
   const theme = useTheme();
+  const router = useRouter();
   const accessToken = useAppStore((state) => state.accessToken);
   const profile = useAppStore((state) => state.farmerProfile);
   const [messages, setMessages] = useState<Message[]>([
@@ -334,12 +336,18 @@ export default function ModernAdvisorScreen() {
       </MessageList>
 
       {/* Compact Quick Suggestions - horizontal scroll */}
-      {!isAgentTyping && messages.length <= 4 && suggestions.length > 0 && (
+      {!isAgentTyping && messages.length <= 4 && (
         <Surface variant="transparent" style={{ paddingVertical: 6, paddingLeft: 16 }}>
           <Text variant="caption" tone="muted" style={{ marginBottom: 6, fontWeight: '600' }}>
             Try asking:
           </Text>
-          <Surface variant="transparent" style={{ flexDirection: 'row', gap: 8 }}>
+          <Surface variant="transparent" style={{ flexDirection: 'row', gap: 8, flexWrap: 'wrap' }}>
+            <Chip
+              label="Scan my crops"
+              tone="success"
+              icon={<Ionicons name="scan" size={14} color={theme.colors.success} />}
+              onPress={() => router.push('/farm-scan')}
+            />
             {suggestions.slice(0, 3).map((suggestion) => (
               <Chip
                 key={suggestion}
@@ -354,8 +362,8 @@ export default function ModernAdvisorScreen() {
 
       {/* Modern Input Toolbar */}
       <InputToolbar>
-        <AttachmentButton>
-          <MaterialCommunityIcons name="attachment" size={20} color={theme.colors.textSecondary} />
+        <AttachmentButton onPress={() => router.push('/farm-scan')}>
+          <Ionicons name="scan" size={20} color={theme.colors.accent} />
         </AttachmentButton>
         <ChatInput
           placeholder="Ask about crops, weather, or pests..."

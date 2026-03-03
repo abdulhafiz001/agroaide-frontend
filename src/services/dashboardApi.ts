@@ -50,4 +50,8 @@ export const dashboardApi = {
   getSnapshot(token: string) {
     return apiRequest<DashboardSnapshotResponse>('/dashboard/snapshot', { token });
   },
+
+  getAiInsights(token: string) {
+    return apiRequest<{ aiInsights: DashboardSnapshotResponse['aiInsights'] }>('/dashboard/ai-insights', { token });
+  },
 };

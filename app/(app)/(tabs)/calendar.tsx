@@ -95,7 +95,10 @@ export default function CalendarScreen() {
     enabled: Boolean(token),
   });
 
-  const invalidate = () => queryClient.invalidateQueries({ queryKey: ['calendar'] });
+  const invalidate = () => {
+    queryClient.invalidateQueries({ queryKey: ['calendar'] });
+    queryClient.invalidateQueries({ queryKey: ['dashboardSnapshot'] });
+  };
 
   const createMutation = useMutation({
     mutationFn: () => calendarApi.createTask(token, {

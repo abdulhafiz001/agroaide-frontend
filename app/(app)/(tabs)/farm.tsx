@@ -1,8 +1,9 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useRouter } from 'expo-router';
 import React, { useState } from 'react';
 import { ActivityIndicator, Alert, Modal, ScrollView, TouchableOpacity, View } from 'react-native';
-import MapView, { Polygon } from 'react-native-maps';
+import { FarmMapView } from '@/components/FarmMapView';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme } from 'styled-components/native';
 
@@ -46,10 +47,15 @@ const ModalContent = styled(Surface)`
   max-height: 80%;
 `;
 
-const FAB = styled(TouchableOpacity)`
+const FABContainer = styled.View`
   position: absolute;
   bottom: 90px;
   right: 20px;
+  gap: 12px;
+  align-items: center;
+`;
+
+const FAB = styled(TouchableOpacity)`
   width: 56px;
   height: 56px;
   border-radius: 28px;
@@ -63,8 +69,23 @@ const FAB = styled(TouchableOpacity)`
   shadow-radius: 4px;
 `;
 
+const ScanFAB = styled(TouchableOpacity)`
+  width: 56px;
+  height: 56px;
+  border-radius: 28px;
+  align-items: center;
+  justify-content: center;
+  background-color: ${({ theme }) => theme.colors.accent};
+  elevation: 4;
+  shadow-color: #000;
+  shadow-offset: 0px 2px;
+  shadow-opacity: 0.25;
+  shadow-radius: 4px;
+`;
+
 export default function FarmScreen() {
   const theme = useTheme();
+  const router = useRouter();
   const token = useAppStore((s) => s.accessToken) ?? '';
   const queryClient = useQueryClient();
 
@@ -188,25 +209,7 @@ export default function FarmScreen() {
         {mapData && (
           <Section>
             <View style={{ height: 180, borderRadius: 16, overflow: 'hidden' }}>
-              <MapView
-                style={{ flex: 1 }}
-                initialRegion={{
-                  latitude: mapData.center.latitude,
-                  longitude: mapData.center.longitude,
-                  latitudeDelta: 0.005,
-                  longitudeDelta: 0.005,
-                }}
-                scrollEnabled={false}
-              >
-                {mapData.polygon.length > 0 && (
-                  <Polygon
-                    coordinates={mapData.polygon}
-                    fillColor="rgba(87, 179, 70, 0.2)"
-                    strokeColor="#57b346"
-                    strokeWidth={2}
-                  />
-                )}
-              </MapView>
+              <FarmMapView center={mapData.center} polygon={mapData.polygon} />
             </View>
           </Section>
         )}
@@ -229,7 +232,13 @@ export default function FarmScreen() {
                     <Text variant="headline">{field.name}</Text>
                     <Text variant="caption" tone="muted">{field.crop} - {field.area} ha</Text>
                   </View>
-                  <View style={{ flexDirection: 'row', gap: 8 }}>
+                  <View style={{ flexDirection: 'row', gap: 10 }}>
+                    <TouchableOpacity
+                      onPress={() => router.push({ pathname: '/farm-scan', params: { fieldId: field.id, fieldName: field.name, fieldCrop: field.crop } })}
+                      style={{ backgroundColor: `${theme.colors.accent}20`, borderRadius: 14, padding: 4 }}
+                    >
+                      <Ionicons name="scan" size={20} color={theme.colors.accent} />
+                    </TouchableOpacity>
                     <TouchableOpacity onPress={() => openEditField(field)}>
                       <Ionicons name="create-outline" size={20} color={theme.colors.primary} />
                     </TouchableOpacity>
@@ -284,9 +293,14 @@ export default function FarmScreen() {
         </Section>
       </Container>
 
-      <FAB onPress={openAddField}>
-        <Ionicons name="add" size={28} color="#fff" />
-      </FAB>
+      <FABContainer>
+        <ScanFAB onPress={() => router.push('/farm-scan')}>
+          <Ionicons name="scan" size={26} color="#fff" />
+        </ScanFAB>
+        <FAB onPress={openAddField}>
+          <Ionicons name="add" size={28} color="#fff" />
+        </FAB>
+      </FABContainer>
 
       {/* Add/Edit Field Modal */}
       <Modal visible={showFieldModal} transparent animationType="slide" onRequestClose={closeFieldModal}>

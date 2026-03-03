@@ -10,7 +10,6 @@ const iconMap = {
   farm: 'map-outline',
   calendar: 'calendar-outline',
   advisor: 'chatbubbles-outline',
-  market: 'business-outline',
   profile: 'person-circle-outline',
 } as const;
 
@@ -38,7 +37,6 @@ export default function TabsLayout() {
       <Tabs.Screen name="farm" options={{ title: 'My Farm' }} />
       <Tabs.Screen name="calendar" options={{ title: 'Calendar' }} />
       <Tabs.Screen name="advisor" options={{ title: 'AI Advisor' }} />
-      <Tabs.Screen name="market" options={{ title: 'Market' }} />
       <Tabs.Screen name="profile" options={{ title: 'Profile' }} />
     </Tabs>
   );

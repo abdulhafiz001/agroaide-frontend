@@ -1,7 +1,8 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useQuery } from '@tanstack/react-query';
+import { useRouter } from 'expo-router';
 import React from 'react';
-import { ActivityIndicator, ScrollView, View } from 'react-native';
+import { ActivityIndicator, ScrollView, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme } from 'styled-components/native';
 
@@ -21,6 +22,13 @@ const Container = styled(ScrollView).attrs(({ theme }) => ({
     paddingBottom: theme.spacing.xxl,
   },
 }))``;
+
+const Header = styled.View`
+  flex-direction: row;
+  align-items: center;
+  padding: ${({ theme }) => `${theme.spacing.sm}px ${theme.spacing.md}px`};
+  gap: ${({ theme }) => theme.spacing.sm}px;
+`;
 
 const Section = styled.View`
   margin-top: ${({ theme }) => theme.spacing.lg}px;
@@ -58,6 +66,7 @@ const formatPrice = (price: number) => {
 
 export default function MarketScreen() {
   const theme = useTheme();
+  const router = useRouter();
   const token = useAppStore((s) => s.accessToken) ?? '';
 
   const { data, isLoading, refetch } = useQuery({
@@ -79,6 +88,12 @@ export default function MarketScreen() {
   if (isLoading) {
     return (
       <Screen>
+        <Header>
+          <TouchableOpacity onPress={() => router.back()} hitSlop={12}>
+            <Ionicons name="arrow-back" size={24} color={theme.colors.textPrimary} />
+          </TouchableOpacity>
+          <Text variant="title" style={{ flex: 1 }}>Market</Text>
+        </Header>
         <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', gap: 12 }}>
           <ActivityIndicator size="large" color={theme.colors.primary} />
           <Text tone="muted">Fetching market intelligence...</Text>
@@ -89,9 +104,15 @@ export default function MarketScreen() {
 
   return (
     <Screen>
+      <Header>
+        <TouchableOpacity onPress={() => router.back()} hitSlop={12}>
+          <Ionicons name="arrow-back" size={24} color={theme.colors.textPrimary} />
+        </TouchableOpacity>
+        <Text variant="title" style={{ flex: 1 }}>Market</Text>
+      </Header>
+
       <Container>
-        <View style={{ paddingTop: 16, gap: 4 }}>
-          <Text variant="display">Market</Text>
+        <View style={{ paddingTop: 8, gap: 4 }}>
           <Text variant="body" tone="muted">AI-estimated crop prices for your farm</Text>
         </View>
 

@@ -31,6 +31,7 @@ import { Button, Chip, InputField, ProgressDonut, Surface, Text } from '@/design
 import styled from '@/design-system/styled';
 import { dashboardApi } from '@/services/dashboardApi';
 import { farmApi, type FarmField } from '@/services/farmApi';
+import { marketApi, type MarketPrice } from '@/services/marketApi';
 import { ApiError } from '@/services/apiClient';
 import { useAppStore } from '@/store/useAppStore';
 
@@ -144,6 +145,20 @@ export default function Dashboard() {
     enabled: Boolean(accessToken),
   });
 
+  const { data: marketData } = useQuery({
+    queryKey: ['marketIntel'],
+    queryFn: () => marketApi.getMarketIntel(accessToken ?? ''),
+    enabled: Boolean(accessToken),
+  });
+
+  // AI insights load separately (non-blocking). Snapshot returns fast with fallback.
+  const { data: aiInsightsData } = useQuery({
+    queryKey: ['dashboardAiInsights'],
+    queryFn: () => dashboardApi.getAiInsights(accessToken ?? ''),
+    enabled: Boolean(accessToken) && Boolean(payload),
+    staleTime: 1000 * 60 * 60,
+  });
+
   const addFieldMutation = useMutation({
     mutationFn: () =>
       farmApi.addField(accessToken ?? '', {
@@ -204,7 +219,8 @@ export default function Dashboard() {
     );
   }
 
-  const { user, weatherAlert, priorityTask, soilHealth, weatherForecast, aiInsights } = payload;
+  const { user, weatherAlert, priorityTask, soilHealth, weatherForecast } = payload;
+  const aiInsights = aiInsightsData?.aiInsights ?? payload.aiInsights;
   const unreadNotifications = (payload as any).unreadNotifications ?? 0;
 
   const getGreeting = () => {
@@ -261,7 +277,11 @@ export default function Dashboard() {
         <Section>
           <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end' }}>
             <Text variant="headline">Priority task</Text>
+            <TouchableOpacity onPress={() => router.push('/(app)/(tabs)/calendar')}>
+              <Text variant="caption" tone="accent">View all</Text>
+            </TouchableOpacity>
           </View>
+          <TouchableOpacity onPress={() => router.push('/(app)/(tabs)/calendar')} activeOpacity={0.8}>
           <Surface rounded="xl" style={{ flexDirection: 'row', gap: 20, alignItems: 'center' }}>
             <ProgressDonut value={priorityTask.progress} size={110} color="#db9534" label={`${priorityTask.progress}%`} subLabel="Complete" />
             <View style={{ flex: 1, gap: 6 }}>
@@ -272,8 +292,9 @@ export default function Dashboard() {
                   <Chip key={item} label={item} tone="info" />
                 ))}
               </View>
-            </View>
-          </Surface>
+              </View>
+            </Surface>
+          </TouchableOpacity>
         </Section>
 
         {/* My Farms Section */}
@@ -342,6 +363,82 @@ export default function Dashboard() {
                   }}>
                   <Plus size={28} color={theme.colors.primary} />
                   <Text variant="caption" tone="accent">Add farm</Text>
+                </Surface>
+              </TouchableOpacity>
+            </ScrollView>
+          )}
+        </Section>
+
+        {/* Market Prices Section */}
+        <Section>
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+            <Text variant="headline">Market prices</Text>
+            <TouchableOpacity onPress={() => router.push('/(app)/market')}>
+              <Text variant="caption" tone="accent">View all</Text>
+            </TouchableOpacity>
+          </View>
+          {(!marketData?.marketPrices || marketData.marketPrices.length === 0) ? (
+            <Surface rounded="xl" style={{ padding: 24, alignItems: 'center', gap: 8 }}>
+              <Text tone="muted">Add crops to your profile to see price estimates.</Text>
+              <TouchableOpacity onPress={() => router.push('/(app)/market')}>
+                <Text variant="caption" tone="accent">Open Market</Text>
+              </TouchableOpacity>
+            </Surface>
+          ) : (
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 12, paddingRight: 16 }}>
+              {marketData.marketPrices.slice(0, 4).map((item: MarketPrice, index: number) => (
+                <TouchableOpacity key={index} onPress={() => router.push('/(app)/market')} activeOpacity={0.7}>
+                  <Surface
+                    rounded="xl"
+                    style={{
+                      width: 140,
+                      gap: 6,
+                      paddingVertical: 14,
+                      paddingHorizontal: 12,
+                    }}>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                      <Leaf size={16} color={theme.colors.primary} />
+                      <Text variant="headline" numberOfLines={1}>{item.commodity}</Text>
+                    </View>
+                    <Text variant="title" style={{ fontWeight: '700' }}>
+                      ₦{(item.pricePerTon / 1000).toFixed(0)}k
+                    </Text>
+                    <Text variant="caption" tone="muted" numberOfLines={1}>{item.location}</Text>
+                    <View style={{
+                      alignSelf: 'flex-start',
+                      paddingHorizontal: 8,
+                      paddingVertical: 2,
+                      borderRadius: 8,
+                      backgroundColor: item.trend === 'up' ? '#d1fae5' : item.trend === 'down' ? '#fde2e2' : '#f3f4f6',
+                    }}>
+                      <Text variant="caption" style={{
+                        color: item.trend === 'up' ? '#047857' : item.trend === 'down' ? '#b91c1c' : '#374151',
+                        fontWeight: '600',
+                        fontSize: 11,
+                      }}>
+                        {item.trend === 'up' ? '↑ Rising' : item.trend === 'down' ? '↓ Falling' : '→ Stable'}
+                      </Text>
+                    </View>
+                  </Surface>
+                </TouchableOpacity>
+              ))}
+              <TouchableOpacity onPress={() => router.push('/(app)/market')} activeOpacity={0.7}>
+                <Surface
+                  rounded="xl"
+                  style={{
+                    width: 100,
+                    gap: 8,
+                    paddingVertical: 16,
+                    paddingHorizontal: 14,
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    borderWidth: 2,
+                    borderStyle: 'dashed',
+                    borderColor: theme.colors.border,
+                    minHeight: 120,
+                  }}>
+                  <ArrowRight size={24} color={theme.colors.primary} />
+                  <Text variant="caption" tone="accent">View all</Text>
                 </Surface>
               </TouchableOpacity>
             </ScrollView>

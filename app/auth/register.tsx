@@ -11,7 +11,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import MapView, { Marker } from 'react-native-maps';
+import { LocationMapPreview } from '@/components/LocationMapPreview';
 import styled from '@/design-system/styled';
 import { useTheme } from 'styled-components/native';
 
@@ -129,7 +129,7 @@ export default function RegisterScreen() {
   const [locationResults, setLocationResults] = useState<LocationResult[]>([]);
   const [searching, setSearching] = useState(false);
   const searchTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const mapRef = useRef<MapView>(null);
+  const mapRef = useRef<unknown>(null);
 
   const fadeAnim = useRef(new Animated.Value(1)).current;
 
@@ -366,21 +366,11 @@ export default function RegisterScreen() {
       {form.farmLatitude != null && form.farmLongitude != null && (
         <>
           <View style={{ height: 200, borderRadius: 16, overflow: 'hidden', marginTop: 8 }}>
-            <MapView
+            <LocationMapPreview
               ref={mapRef}
-              style={{ flex: 1 }}
-              initialRegion={{
-                latitude: form.farmLatitude,
-                longitude: form.farmLongitude,
-                latitudeDelta: 0.01,
-                longitudeDelta: 0.01,
-              }}
-            >
-              <Marker
-                coordinate={{ latitude: form.farmLatitude, longitude: form.farmLongitude }}
-                title="Farm location"
-              />
-            </MapView>
+              latitude={form.farmLatitude}
+              longitude={form.farmLongitude}
+            />
           </View>
           <Chip label={form.farmLocation.substring(0, 60) + (form.farmLocation.length > 60 ? '...' : '')} tone="success" />
         </>
