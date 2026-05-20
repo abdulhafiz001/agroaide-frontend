@@ -20,6 +20,7 @@ import styled from '@/design-system/styled';
 import { farmApi } from '@/services/farmApi';
 import { farmScanApi, type ScanResult } from '@/services/farmScanApi';
 import { useAppStore } from '@/store/useAppStore';
+import { useTranslation } from '@/i18n/useTranslation';
 
 const Screen = styled(SafeAreaView)`
   flex: 1;
@@ -120,6 +121,7 @@ const conditionConfig: Record<string, { icon: string; color: string; bg: string;
 export default function FarmScanScreen() {
   const theme = useTheme();
   const router = useRouter();
+  const { t } = useTranslation();
   const params = useLocalSearchParams<{ fieldId?: string; fieldName?: string; fieldCrop?: string }>();
   const token = useAppStore((s) => s.accessToken) ?? '';
 
@@ -211,7 +213,7 @@ export default function FarmScanScreen() {
         </TouchableOpacity>
         <Ionicons name="scan" size={22} color={theme.colors.primary} />
         <Text variant="title" style={{ flex: 1 }}>
-          Crop Scanner
+          {t('cropScanner')}
         </Text>
       </Header>
 
@@ -219,12 +221,12 @@ export default function FarmScanScreen() {
         {/* Field Selector */}
         <Surface rounded="lg" padding="sm" style={{ gap: 8 }}>
           <Text variant="caption" tone="muted">
-            Scanning for:
+            {t('scanningFor')}:
           </Text>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flexDirection: 'row' }}>
             <View style={{ flexDirection: 'row', gap: 8 }}>
               <Chip
-                label="General Farm"
+                label={t('generalFarm')}
                 tone={!selectedFieldId ? 'success' : 'default'}
                 onPress={() => setSelectedFieldId(undefined)}
               />
@@ -249,7 +251,7 @@ export default function FarmScanScreen() {
                 <AnalyzingOverlay>
                   <ActivityIndicator size="large" color={theme.colors.primary} />
                   <Text variant="headline" style={{ color: '#fff' }}>
-                    Analyzing your crops...
+                    {t('analyzingCrops')}
                   </Text>
                   <Text variant="caption" style={{ color: 'rgba(255,255,255,0.7)', textAlign: 'center', paddingHorizontal: 32 }}>
                     Our AI is examining the image with your farm's context. This may take a moment.
@@ -272,7 +274,7 @@ export default function FarmScanScreen() {
                 <Ionicons name="camera" size={32} color={theme.colors.primary} />
               </View>
               <Text variant="headline" tone="muted">
-                Tap to capture or select a photo
+                {t('tapToCapture')}
               </Text>
               <Text variant="caption" tone="muted" style={{ textAlign: 'center', paddingHorizontal: 32 }}>
                 Take a clear photo of your crops, leaves, or field for AI-powered diagnosis
@@ -285,14 +287,14 @@ export default function FarmScanScreen() {
         {imageUri && !isAnalyzing && (
           <View style={{ flexDirection: 'row', gap: 12, marginTop: 16 }}>
             <Button
-              label="Change Image"
+              label={t('changeImage')}
               variant="ghost"
               icon={<Ionicons name="images-outline" size={18} color={theme.colors.accent} />}
               onPress={showImageSourcePicker}
               style={{ flex: 1 }}
             />
             <Button
-              label={result ? 'Scan Again' : 'Analyze Crop'}
+              label={result ? t('scanAgain') : t('analyzeCrop')}
               icon={<Ionicons name="scan" size={18} color="#fff" />}
               onPress={() => analyzeMutation.mutate()}
               disabled={!imageBase64}
@@ -354,7 +356,7 @@ export default function FarmScanScreen() {
             {result.disease && (
               <>
                 <SectionTitle variant="headline">
-                  <Ionicons name="bug-outline" size={18} color={theme.colors.danger} /> Disease Detected
+                  <Ionicons name="bug-outline" size={18} color={theme.colors.danger} /> {t('diseaseDetected')}
                 </SectionTitle>
                 <DiseaseCard rounded="xl">
                   <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -391,13 +393,13 @@ export default function FarmScanScreen() {
 
             {/* Recommendations */}
             <SectionTitle variant="headline">
-              <Ionicons name="bulb-outline" size={18} color={theme.colors.accent} /> What To Do
+              <Ionicons name="bulb-outline" size={18} color={theme.colors.accent} /> {t('whatToDo')}
             </SectionTitle>
 
             {result.recommendations.immediate.length > 0 && (
               <Surface rounded="lg" style={{ gap: 8, marginBottom: 10 }}>
                 <Text variant="caption" style={{ fontWeight: '700', color: theme.colors.accent }}>
-                  TAKE ACTION NOW
+                  {t('takeActionNow')}
                 </Text>
                 {result.recommendations.immediate.map((r, i) => (
                   <View key={i} style={{ flexDirection: 'row', gap: 8 }}>
@@ -413,7 +415,7 @@ export default function FarmScanScreen() {
             {result.recommendations.products.length > 0 && (
               <>
                 <Text variant="caption" style={{ fontWeight: '700', marginBottom: 6, marginTop: 4 }}>
-                  RECOMMENDED PRODUCTS
+                  {t('recommendedProducts')}
                 </Text>
                 {result.recommendations.products.map((p, i) => (
                   <ProductCard key={i} rounded="lg">
@@ -431,7 +433,7 @@ export default function FarmScanScreen() {
             {result.recommendations.prevention.length > 0 && (
               <Surface rounded="lg" style={{ gap: 8, marginTop: 10 }} variant="muted">
                 <Text variant="caption" style={{ fontWeight: '700', color: theme.colors.info }}>
-                  PREVENTION TIPS
+                  {t('preventionTips')}
                 </Text>
                 {result.recommendations.prevention.map((p, i) => (
                   <View key={i} style={{ flexDirection: 'row', gap: 8 }}>
@@ -445,7 +447,7 @@ export default function FarmScanScreen() {
             {result.recommendations.longTerm && result.recommendations.longTerm.length > 0 && (
               <Surface rounded="lg" style={{ gap: 8, marginTop: 10 }} variant="muted">
                 <Text variant="caption" style={{ fontWeight: '700' }}>
-                  LONG-TERM ADVICE
+                  {t('longTermAdvice')}
                 </Text>
                 {result.recommendations.longTerm.map((l, i) => (
                   <View key={i} style={{ flexDirection: 'row', gap: 8 }}>
@@ -462,7 +464,7 @@ export default function FarmScanScreen() {
                 <View style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
                   <Ionicons name="leaf" size={18} color={theme.colors.primary} />
                   <Text variant="caption" style={{ fontWeight: '700', color: theme.colors.primary }}>
-                    PERSONALIZED FOR YOUR FARM
+                    {t('personalizedForYou')}
                   </Text>
                 </View>
                 <Text variant="body">{result.personalizedNote}</Text>
@@ -471,7 +473,7 @@ export default function FarmScanScreen() {
 
             {/* New Scan */}
             <Button
-              label="Scan Another Image"
+              label={t('scanAnother')}
               variant="ghost"
               icon={<Ionicons name="refresh" size={18} color={theme.colors.accent} />}
               onPress={resetScan}

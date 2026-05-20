@@ -15,4 +15,13 @@ export const advisorApi = {
       token,
     });
   },
+
+  transcribeVoice(audioBase64: string, token: string, languageHint?: string) {
+    return apiRequest<{ success: boolean; text?: string; error?: string }>('/advisor/transcribe', {
+      method: 'POST',
+      token,
+      timeoutMs: 30000,
+      body: { audioBase64, languageHint },
+    });
+  },
 };

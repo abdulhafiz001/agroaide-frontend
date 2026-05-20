@@ -1,4 +1,5 @@
 export type ExperienceLevel = 'beginner' | 'intermediate' | 'advanced';
+export type SupportedLanguage = 'en' | 'ha' | 'yo' | 'pcm';
 
 export interface FarmerProfile {
   id: string;
@@ -16,5 +17,6 @@ export interface FarmerProfile {
   irrigationAccess: 'rain-fed' | 'drip' | 'sprinkler' | 'flood';
   avatarColor: string;
   preferredTheme: 'light' | 'dark' | 'field';
+  preferredLanguage: SupportedLanguage;
 }
 

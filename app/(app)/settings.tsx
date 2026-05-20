@@ -7,12 +7,15 @@ import { Alert, Switch, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme } from 'styled-components/native';
 
+import * as Location from 'expo-location';
 import { Button, Chip, InputField, Surface, Text } from '@/design-system/components';
 import { authApi } from '@/services/authApi';
 import { systemApi } from '@/services/systemApi';
 import { ThemePreference } from '@/design-system/theme';
 import { useAppStore, type NotificationPreferences } from '@/store/useAppStore';
 import { ApiError } from '@/services/apiClient';
+import { LANGUAGE_OPTIONS, type SupportedLanguage } from '@/i18n/translations';
+import { useTranslation } from '@/i18n/useTranslation';
 
 import styled from '@/design-system/styled';
 
@@ -246,6 +249,44 @@ export default function ProfileScreen() {
     onSettled: () => { signOut(); router.replace('/auth/login'); },
   });
 
+  const { t } = useTranslation();
+  const currentLanguage = (profile?.preferredLanguage ?? 'en') as SupportedLanguage;
+
+  const handleLanguageChange = useCallback(async (langCode: SupportedLanguage) => {
+    if (!accessToken) return;
+    try {
+      const res = await authApi.updateProfile(accessToken, { preferredLanguage: langCode });
+      setProfile(res.profile);
+    } catch {
+      Alert.alert('Error', 'Could not update language preference.');
+    }
+  }, [accessToken, setProfile]);
+
+  const handleGPSLocation = useCallback(async () => {
+    try {
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert('Permission Denied', 'Allow location access to use this feature.');
+        return;
+      }
+      const position = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High });
+      const lat = position.coords.latitude;
+      const lng = position.coords.longitude;
+      setEditFarmLatitude(lat);
+      setEditFarmLongitude(lng);
+      const LOCATIONIQ_KEY = process.env.EXPO_PUBLIC_LOCATIONIQ_KEY;
+      try {
+        const res = await fetch(`https://us1.locationiq.com/v1/reverse?key=${LOCATIONIQ_KEY}&lat=${lat}&lon=${lng}&format=json`);
+        const data = await res.json();
+        if (data?.display_name) setEditFarmLocation(data.display_name);
+      } catch {
+        setEditFarmLocation(`${lat.toFixed(4)}, ${lng.toFixed(4)}`);
+      }
+    } catch (e: any) {
+      Alert.alert('Location Error', e.message || 'Could not get location.');
+    }
+  }, []);
+
   const initials = profile?.fullName?.split(' ').map((p) => p[0]).slice(0, 2).join('').toUpperCase();
 
   return (
@@ -282,6 +323,23 @@ export default function ProfileScreen() {
               <InputField label="Phone number" value={editPhone} onChangeText={setEditPhone} keyboardType="phone-pad" />
               <InputField label="Farm name" value={editFarmName} onChangeText={setEditFarmName} />
               <InputField label="Farm location" value={editFarmLocation} onChangeText={searchEditLocation} placeholder="Search for a location..." />
+              <TouchableOpacity
+                onPress={handleGPSLocation}
+                style={{
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  gap: 6,
+                  paddingVertical: 10,
+                  paddingHorizontal: 14,
+                  borderRadius: 12,
+                  borderWidth: 1,
+                  borderColor: theme.colors.primary,
+                  alignSelf: 'flex-start',
+                }}
+              >
+                <Ionicons name="locate" size={16} color={theme.colors.primary} />
+                <Text variant="caption" style={{ color: theme.colors.primary, fontWeight: '600' }}>{t('useMyLocation')}</Text>
+              </TouchableOpacity>
               {editLocationResults.length > 0 && (
                 <Surface variant="muted" style={{ maxHeight: 150, borderRadius: 12, overflow: 'hidden' }}>
                   {editLocationResults.map((item: any) => (
@@ -376,6 +434,22 @@ export default function ProfileScreen() {
               />
             </View>
           )}
+        </Section>
+
+        {/* Language */}
+        <Section rounded="xl">
+          <Text variant="headline">{t('language')}</Text>
+          <Text variant="caption" tone="muted">{t('selectLanguage')}</Text>
+          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+            {LANGUAGE_OPTIONS.map((lang) => (
+              <Chip
+                key={lang.code}
+                label={`${lang.nativeLabel} (${lang.label})`}
+                tone={currentLanguage === lang.code ? 'success' : 'default'}
+                onPress={() => handleLanguageChange(lang.code)}
+              />
+            ))}
+          </View>
         </Section>
 
         {/* Display & Modes */}

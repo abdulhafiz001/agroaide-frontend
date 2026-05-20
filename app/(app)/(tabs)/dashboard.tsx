@@ -34,6 +34,7 @@ import { farmApi, type FarmField } from '@/services/farmApi';
 import { marketApi, type MarketPrice } from '@/services/marketApi';
 import { ApiError } from '@/services/apiClient';
 import { useAppStore } from '@/store/useAppStore';
+import { useTranslation } from '@/i18n/useTranslation';
 
 const Screen = styled(SafeAreaView)`
   flex: 1;
@@ -121,6 +122,7 @@ export default function Dashboard() {
   const accessToken = useAppStore((state) => state.accessToken);
   const signOut = useAppStore((state) => state.signOut);
 
+  const { t, getGreeting } = useTranslation();
   const [showAddFarmModal, setShowAddFarmModal] = useState(false);
   const [newFieldName, setNewFieldName] = useState('');
   const [newFieldCrop, setNewFieldCrop] = useState('');
@@ -222,13 +224,7 @@ export default function Dashboard() {
   const { user, weatherAlert, priorityTask, soilHealth, weatherForecast } = payload;
   const aiInsights = aiInsightsData?.aiInsights ?? payload.aiInsights;
   const unreadNotifications = (payload as any).unreadNotifications ?? 0;
-
-  const getGreeting = () => {
-    const hour = new Date().getHours();
-    if (hour < 12) return 'Good morning';
-    if (hour < 17) return 'Good afternoon';
-    return 'Good evening';
-  };
+  const outbreakAlerts = (payload as any).outbreakAlerts ?? [];
 
   return (
     <Screen>
@@ -237,6 +233,7 @@ export default function Dashboard() {
           <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
             <View>
               <Text variant="caption" tone="muted">{getGreeting()}</Text>
+
               <Text variant="display">{user.name}</Text>
             </View>
             <TouchableOpacity style={{ padding: 10 }} onPress={() => router.push('/(app)/notifications')}>
@@ -274,11 +271,40 @@ export default function Dashboard() {
           </LinearGradient>
         ) : null}
 
+        {outbreakAlerts.length > 0 && (
+          <Section>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+              <Text variant="headline">{t('diseaseAlerts')}</Text>
+              <TouchableOpacity onPress={() => router.push('/(app)/outbreak-map')}>
+                <Text variant="caption" tone="accent">{t('viewOutbreakMap')}</Text>
+              </TouchableOpacity>
+            </View>
+            {outbreakAlerts.slice(0, 2).map((alert: any) => (
+              <TouchableOpacity key={alert.id} onPress={() => router.push('/(app)/outbreak-map')} activeOpacity={0.7}>
+                <Surface
+                  rounded="xl"
+                  style={{
+                    borderLeftWidth: 4,
+                    borderLeftColor: '#e63946',
+                    gap: 6,
+                  }}
+                >
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                    <AlertTriangle size={18} color="#e63946" />
+                    <Text variant="headline" style={{ flex: 1 }}>{alert.title}</Text>
+                  </View>
+                  <Text variant="body" tone="muted" numberOfLines={2}>{alert.message}</Text>
+                </Surface>
+              </TouchableOpacity>
+            ))}
+          </Section>
+        )}
+
         <Section>
           <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end' }}>
-            <Text variant="headline">Priority task</Text>
+            <Text variant="headline">{t('priorityTask')}</Text>
             <TouchableOpacity onPress={() => router.push('/(app)/(tabs)/calendar')}>
-              <Text variant="caption" tone="accent">View all</Text>
+              <Text variant="caption" tone="accent">{t('viewAll')}</Text>
             </TouchableOpacity>
           </View>
           <TouchableOpacity onPress={() => router.push('/(app)/(tabs)/calendar')} activeOpacity={0.8}>
@@ -300,7 +326,7 @@ export default function Dashboard() {
         {/* My Farms Section */}
         <Section>
           <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-            <Text variant="headline">My farms</Text>
+            <Text variant="headline">{t('myFarms')}</Text>
             <View style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
               <Chip label="+ Add" tone="success" onPress={() => setShowAddFarmModal(true)} />
               <TouchableOpacity onPress={() => router.push('/(app)/(tabs)/farm')}>
@@ -372,7 +398,7 @@ export default function Dashboard() {
         {/* Market Prices Section */}
         <Section>
           <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-            <Text variant="headline">Market prices</Text>
+            <Text variant="headline">{t('marketPrices')}</Text>
             <TouchableOpacity onPress={() => router.push('/(app)/market')}>
               <Text variant="caption" tone="accent">View all</Text>
             </TouchableOpacity>
@@ -447,7 +473,7 @@ export default function Dashboard() {
 
         <Section>
           <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-            <Text variant="headline">Soil & conditions</Text>
+            <Text variant="headline">{t('soilConditions')}</Text>
             <MoreHorizontal size={20} color={theme.colors.textSecondary} />
           </View>
           <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 12 }}>
@@ -479,7 +505,7 @@ export default function Dashboard() {
         </Section>
 
         <Section>
-          <Text variant="headline">7-day forecast</Text>
+          <Text variant="headline">{t('forecast')}</Text>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 12, paddingRight: 16 }}>
             {weatherForecast.map((day: any, index: number) => {
               const WeatherIcon = weatherIconMap[day.icon] || Cloud;
@@ -512,7 +538,7 @@ export default function Dashboard() {
         <Section style={{ marginBottom: 32 }}>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
             <Sparkles size={18} color={theme.colors.primary} />
-            <Text variant="headline">AI insights</Text>
+            <Text variant="headline">{t('aiInsights')}</Text>
           </View>
           <View style={{ gap: 12 }}>
             {aiInsights.map((tip: any) => (

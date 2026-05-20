@@ -1,5 +1,6 @@
 import { useMutation } from '@tanstack/react-query';
 import { Link, useRouter } from 'expo-router';
+import * as Location from 'expo-location';
 import React, { useCallback, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
@@ -11,6 +12,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { LocationMapPreview } from '@/components/LocationMapPreview';
 import styled from '@/design-system/styled';
 import { useTheme } from 'styled-components/native';
@@ -128,6 +130,7 @@ export default function RegisterScreen() {
   const [locationQuery, setLocationQuery] = useState('');
   const [locationResults, setLocationResults] = useState<LocationResult[]>([]);
   const [searching, setSearching] = useState(false);
+  const [gettingGPS, setGettingGPS] = useState(false);
   const searchTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
   const mapRef = useRef<unknown>(null);
 
@@ -188,6 +191,45 @@ export default function RegisterScreen() {
     },
     [],
   );
+
+  const useGPSLocation = useCallback(async () => {
+    setGettingGPS(true);
+    try {
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert('Permission Denied', 'Please allow location access to use this feature.');
+        return;
+      }
+      const position = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High });
+      const lat = position.coords.latitude;
+      const lng = position.coords.longitude;
+      updateForm('farmLatitude', lat);
+      updateForm('farmLongitude', lng);
+
+      try {
+        const res = await fetch(
+          `https://us1.locationiq.com/v1/reverse?key=${LOCATIONIQ_KEY}&lat=${lat}&lon=${lng}&format=json`,
+        );
+        const data = await res.json();
+        if (data?.display_name) {
+          updateForm('farmLocation', data.display_name);
+          setLocationQuery(data.display_name);
+        }
+      } catch {
+        updateForm('farmLocation', `${lat.toFixed(4)}, ${lng.toFixed(4)}`);
+        setLocationQuery(`${lat.toFixed(4)}, ${lng.toFixed(4)}`);
+      }
+
+      mapRef.current?.animateToRegion(
+        { latitude: lat, longitude: lng, latitudeDelta: 0.01, longitudeDelta: 0.01 },
+        600,
+      );
+    } catch (e: any) {
+      Alert.alert('Location Error', e.message || 'Could not get your location. Please try again.');
+    } finally {
+      setGettingGPS(false);
+    }
+  }, []);
 
   const mutation = useMutation({
     mutationFn: () => {
@@ -342,6 +384,35 @@ export default function RegisterScreen() {
       <Text variant="headline" tone="muted">
         Farm location (optional)
       </Text>
+      <TouchableOpacity
+        onPress={useGPSLocation}
+        disabled={gettingGPS}
+        style={{
+          flexDirection: 'row',
+          alignItems: 'center',
+          justifyContent: 'center',
+          gap: 8,
+          paddingVertical: 14,
+          borderRadius: 16,
+          borderWidth: 1.5,
+          borderColor: theme.colors.primary,
+          backgroundColor: `${theme.colors.primary}10`,
+        }}
+      >
+        {gettingGPS ? (
+          <ActivityIndicator size="small" color={theme.colors.primary} />
+        ) : (
+          <Ionicons name="locate" size={20} color={theme.colors.primary} />
+        )}
+        <Text variant="body" style={{ color: theme.colors.primary, fontWeight: '600' }}>
+          {gettingGPS ? 'Getting location...' : 'Use my precise location'}
+        </Text>
+      </TouchableOpacity>
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+        <View style={{ flex: 1, height: 1, backgroundColor: theme.colors.border }} />
+        <Text variant="caption" tone="muted">or search</Text>
+        <View style={{ flex: 1, height: 1, backgroundColor: theme.colors.border }} />
+      </View>
       <InputField
         label="Search for your farm"
         value={locationQuery}

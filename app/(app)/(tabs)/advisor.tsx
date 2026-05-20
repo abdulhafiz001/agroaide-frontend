@@ -1,8 +1,15 @@
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { useRouter } from 'expo-router';
+import {
+  useAudioRecorder,
+  AudioModule,
+  RecordingPresets,
+  useAudioRecorderState,
+  setAudioModeAsync,
+} from 'expo-audio';
 import React, { useEffect, useRef, useState } from 'react';
-import { Animated, TouchableOpacity } from 'react-native';
+import { Alert, Animated, TouchableOpacity } from 'react-native';
 import { useTheme } from 'styled-components/native';
 
 import { Chip, Surface, Text } from '@/design-system/components';
@@ -10,6 +17,7 @@ import styled from '@/design-system/styled';
 import { advisorApi } from '@/services/advisorApi';
 import { weatherApi } from '@/services/weatherApi';
 import { useAppStore } from '@/store/useAppStore';
+import { useTranslation } from '@/i18n/useTranslation';
 
 // --- 1. Enhanced Styled Components ---
 const Screen = styled.View`
@@ -177,8 +185,12 @@ type Message = {
 export default function ModernAdvisorScreen() {
   const theme = useTheme();
   const router = useRouter();
+  const { t, lang } = useTranslation();
   const accessToken = useAppStore((state) => state.accessToken);
   const profile = useAppStore((state) => state.farmerProfile);
+  const audioRecorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
+  const recorderState = useAudioRecorderState(audioRecorder);
+  const [isTranscribing, setIsTranscribing] = useState(false);
   const [messages, setMessages] = useState<Message[]>([
     {
       id: 'intro',
@@ -225,6 +237,72 @@ export default function ModernAdvisorScreen() {
       return [updatedIntro, ...prev.slice(1)];
     });
   }, [profile?.fullName]);
+
+  useEffect(() => {
+    (async () => {
+      const status = await AudioModule.requestRecordingPermissionsAsync();
+      if (status.granted) {
+        await setAudioModeAsync({ playsInSilentMode: true, allowsRecording: true });
+      }
+    })();
+  }, []);
+
+  const startRecording = async () => {
+    try {
+      const status = await AudioModule.getRecordingPermissionsAsync();
+      if (!status.granted) {
+        const req = await AudioModule.requestRecordingPermissionsAsync();
+        if (!req.granted) {
+          Alert.alert('Permission Required', 'Microphone access is needed for voice input.');
+          return;
+        }
+      }
+      await audioRecorder.prepareToRecordAsync();
+      audioRecorder.record();
+    } catch (err) {
+      Alert.alert('Error', 'Could not start recording. Please try again.');
+    }
+  };
+
+  const stopRecording = async () => {
+    if (!recorderState.isRecording) return;
+    setIsTranscribing(true);
+
+    try {
+      await audioRecorder.stop();
+      const uri = audioRecorder.uri;
+
+      if (!uri) {
+        setIsTranscribing(false);
+        return;
+      }
+
+      const response = await fetch(uri);
+      const blob = await response.blob();
+      const reader = new FileReader();
+
+      reader.onloadend = async () => {
+        const base64 = reader.result as string;
+        try {
+          const result = await advisorApi.transcribeVoice(base64, accessToken ?? '', lang);
+          if (result.success && result.text) {
+            setInput(result.text);
+          } else {
+            Alert.alert('Transcription Failed', result.error || 'Could not transcribe audio. Please type your message instead.');
+          }
+        } catch {
+          Alert.alert('Error', 'Voice transcription failed. Please type your message.');
+        } finally {
+          setIsTranscribing(false);
+        }
+      };
+
+      reader.readAsDataURL(blob);
+    } catch {
+      setIsTranscribing(false);
+      Alert.alert('Error', 'Could not process recording.');
+    }
+  };
 
   const sendMessage = (text: string) => {
     if (!text.trim()) return;
@@ -281,7 +359,7 @@ export default function ModernAdvisorScreen() {
           <Surface variant="transparent" style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
             <Ionicons name="leaf" size={18} color={theme.colors.primary} />
             <Text variant="body" style={{ fontWeight: '700' }}>
-              AI Advisor
+              {t('aiAdvisor')}
             </Text>
           </Surface>
           <TouchableOpacity>
@@ -339,11 +417,11 @@ export default function ModernAdvisorScreen() {
       {!isAgentTyping && messages.length <= 4 && (
         <Surface variant="transparent" style={{ paddingVertical: 6, paddingLeft: 16 }}>
           <Text variant="caption" tone="muted" style={{ marginBottom: 6, fontWeight: '600' }}>
-            Try asking:
+            {t('tryAsking')}
           </Text>
           <Surface variant="transparent" style={{ flexDirection: 'row', gap: 8, flexWrap: 'wrap' }}>
             <Chip
-              label="Scan my crops"
+              label={t('scanMyCrops')}
               tone="success"
               icon={<Ionicons name="scan" size={14} color={theme.colors.success} />}
               onPress={() => router.push('/farm-scan')}
@@ -366,15 +444,20 @@ export default function ModernAdvisorScreen() {
           <Ionicons name="scan" size={20} color={theme.colors.accent} />
         </AttachmentButton>
         <ChatInput
-          placeholder="Ask about crops, weather, or pests..."
+          placeholder={t('askPlaceholder')}
           placeholderTextColor="#9ba3ab"
           value={input}
           onChangeText={setInput}
           returnKeyType="send"
           onSubmitEditing={() => sendMessage(input)}
           blurOnSubmit={false}
+          editable={!isTranscribing}
         />
-        {input.trim() ? (
+        {isTranscribing ? (
+          <Surface variant="transparent" style={{ marginLeft: 12, padding: 12, alignItems: 'center' }}>
+            <Ionicons name="hourglass-outline" size={22} color={theme.colors.accent} />
+          </Surface>
+        ) : input.trim() ? (
           <TouchableOpacity
             style={{ marginLeft: 12, padding: 12 }}
             onPress={() => sendMessage(input)}
@@ -382,8 +465,12 @@ export default function ModernAdvisorScreen() {
             <Ionicons name="send" size={24} color={theme.colors.primary} />
           </TouchableOpacity>
         ) : (
-          <VoiceButton>
-            <Ionicons name="mic-outline" size={22} color="#FFF" />
+          <VoiceButton
+            onPressIn={startRecording}
+            onPressOut={stopRecording}
+            style={recorderState.isRecording ? { backgroundColor: theme.colors.danger } : undefined}
+          >
+            <Ionicons name={recorderState.isRecording ? 'mic' : 'mic-outline'} size={22} color="#FFF" />
           </VoiceButton>
         )}
       </InputToolbar>
