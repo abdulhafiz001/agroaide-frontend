@@ -44,15 +44,23 @@ export type ScanHistoryItem = {
   id: string;
   date: string;
   condition: string;
+  conditionLabel?: string;
+  diseaseName?: string | null;
   fieldName?: string;
   fieldCrop?: string;
   summary?: string;
-  imagePath?: string;
+  confidencePercent?: number | null;
+  imagePath?: string | null;
+};
+
+export type ScanDetail = ScanHistoryItem & {
+  analysis: ScanResult;
+  farmFieldId?: string | null;
 };
 
 export const farmScanApi = {
   analyzeImage(token: string, imageBase64: string, farmFieldId?: string) {
-    return apiRequest<{ analysis: ScanResult }>('/farm/analyze-image', {
+    return apiRequest<{ scanId: string; analysis: ScanResult }>('/farm/analyze-image', {
       method: 'POST',
       token,
       timeoutMs: 120000,
@@ -65,6 +73,13 @@ export const farmScanApi = {
 
   getHistory(token: string) {
     return apiRequest<{ history: ScanHistoryItem[] }>('/farm/scan-history', {
+      method: 'GET',
+      token,
+    });
+  },
+
+  getScan(token: string, scanId: string) {
+    return apiRequest<{ scan: ScanDetail }>(`/farm/scan-history/${scanId}`, {
       method: 'GET',
       token,
     });

@@ -2,15 +2,18 @@ import { apiRequest } from '@/services/apiClient';
 
 export type DashboardSnapshotResponse = {
   user: {
+    id?: string;
     name: string;
     farmName: string;
   };
+  profileComplete?: boolean;
+  hasFarmLocation?: boolean;
   weatherAlert: {
     severity: string;
     title: string;
     advice: string;
     gradient: [string, string];
-  };
+  } | null;
   priorityTask: {
     title: string;
     progress: number;
@@ -39,11 +42,18 @@ export type DashboardSnapshotResponse = {
   }[];
   unreadNotifications: number;
   currentWeather: {
-    temperature: number;
-    humidity: number;
-    condition: string;
-    icon: string;
+    temperature?: number;
+    humidity?: number;
+    condition?: string;
+    icon?: string;
   };
+  outbreakAlerts?: Array<{
+    id: string;
+    title: string;
+    message: string;
+    data?: Record<string, unknown>;
+    createdAt?: string;
+  }>;
 };
 
 export const dashboardApi = {

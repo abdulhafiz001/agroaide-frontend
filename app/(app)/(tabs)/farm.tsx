@@ -2,11 +2,21 @@ import { Ionicons } from '@expo/vector-icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'expo-router';
 import React, { useState } from 'react';
-import { ActivityIndicator, Alert, Modal, ScrollView, TouchableOpacity, View } from 'react-native';
+import {
+  ActivityIndicator,
+  KeyboardAvoidingView,
+  Modal,
+  Platform,
+  ScrollView,
+  TouchableOpacity,
+  View,
+} from 'react-native';
 import { FarmMapView } from '@/components/FarmMapView';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme } from 'styled-components/native';
 
+import { ConfirmModal } from '@/components/ConfirmModal';
+import { useToast } from '@/components/Toast';
 import { Button, Chip, InputField, Surface, Text } from '@/design-system/components';
 import styled from '@/design-system/styled';
 import { farmApi, type FarmField, type JournalEntry } from '@/services/farmApi';
@@ -85,6 +95,7 @@ const ScanFAB = styled(TouchableOpacity)`
 
 export default function FarmScreen() {
   const theme = useTheme();
+  const toast = useToast();
   const router = useRouter();
   const token = useAppStore((s) => s.accessToken) ?? '';
   const queryClient = useQueryClient();
@@ -99,6 +110,7 @@ export default function FarmScreen() {
   const [fieldArea, setFieldArea] = useState('');
   const [journalNote, setJournalNote] = useState('');
   const [journalType, setJournalType] = useState('observation');
+  const [deleteTarget, setDeleteTarget] = useState<{ type: 'field' | 'journal'; id: string; name: string } | null>(null);
 
   const { data, isLoading, refetch } = useQuery({
     queryKey: ['farmOverview'],
@@ -111,37 +123,45 @@ export default function FarmScreen() {
   const addFieldMutation = useMutation({
     mutationFn: () => farmApi.addField(token, { name: fieldName, crop: fieldCrop, areaHectares: parseFloat(fieldArea) || 0 }),
     onSuccess: () => { invalidate(); closeFieldModal(); },
-    onError: () => Alert.alert('Error', 'Could not add field.'),
+    onError: () => toast.error('Error', 'Could not add field.'),
   });
 
   const updateFieldMutation = useMutation({
     mutationFn: () => farmApi.updateField(token, editingField!.id, { name: fieldName, crop: fieldCrop, areaHectares: parseFloat(fieldArea) || 0 }),
     onSuccess: () => { invalidate(); closeFieldModal(); },
-    onError: () => Alert.alert('Error', 'Could not update field.'),
+    onError: () => toast.error('Error', 'Could not update field.'),
   });
 
   const deleteFieldMutation = useMutation({
     mutationFn: (id: string) => farmApi.deleteField(token, id),
-    onSuccess: () => invalidate(),
-    onError: () => Alert.alert('Error', 'Could not delete field.'),
+    onSuccess: () => {
+      invalidate();
+      setDeleteTarget(null);
+      toast.success('Deleted', 'Farm field removed.');
+    },
+    onError: () => toast.error('Error', 'Could not delete field.'),
   });
 
   const addJournalMutation = useMutation({
     mutationFn: () => farmApi.addJournalEntry(token, { note: journalNote, type: journalType }),
     onSuccess: () => { invalidate(); closeJournalModal(); },
-    onError: () => Alert.alert('Error', 'Could not add journal entry.'),
+    onError: () => toast.error('Error', 'Could not add journal entry.'),
   });
 
   const updateJournalMutation = useMutation({
     mutationFn: () => farmApi.updateJournalEntry(token, editingEntry!.id, { note: journalNote, type: journalType }),
     onSuccess: () => { invalidate(); closeJournalModal(); },
-    onError: () => Alert.alert('Error', 'Could not update entry.'),
+    onError: () => toast.error('Error', 'Could not update entry.'),
   });
 
   const deleteJournalMutation = useMutation({
     mutationFn: (id: string) => farmApi.deleteJournalEntry(token, id),
-    onSuccess: () => invalidate(),
-    onError: () => Alert.alert('Error', 'Could not delete entry.'),
+    onSuccess: () => {
+      invalidate();
+      setDeleteTarget(null);
+      toast.success('Deleted', 'Journal entry removed.');
+    },
+    onError: () => toast.error('Error', 'Could not delete entry.'),
   });
 
   const openAddField = () => {
@@ -173,13 +193,7 @@ export default function FarmScreen() {
   const closeJournalModal = () => { setShowJournalModal(false); setEditingEntry(null); };
 
   const confirmDelete = (type: 'field' | 'journal', id: string, name: string) => {
-    Alert.alert('Delete', `Are you sure you want to delete "${name}"?`, [
-      { text: 'Cancel', style: 'cancel' },
-      { text: 'Delete', style: 'destructive', onPress: () => {
-        if (type === 'field') deleteFieldMutation.mutate(id);
-        else deleteJournalMutation.mutate(id);
-      }},
-    ]);
+    setDeleteTarget({ type, id, name });
   };
 
   if (isLoading) {
@@ -304,58 +318,90 @@ export default function FarmScreen() {
 
       {/* Add/Edit Field Modal */}
       <Modal visible={showFieldModal} transparent animationType="slide" onRequestClose={closeFieldModal}>
-        <ModalOverlay>
-          <ModalContent>
-            <Text variant="headline">{editingField ? 'Edit field' : 'Add new field'}</Text>
-            <InputField label="Field name" value={fieldName} onChangeText={setFieldName} placeholder="e.g. North Block" />
-            <InputField label="Crop" value={fieldCrop} onChangeText={setFieldCrop} placeholder="e.g. Maize" />
-            <InputField label="Area (hectares)" value={fieldArea} onChangeText={setFieldArea} keyboardType="decimal-pad" />
-            <View style={{ flexDirection: 'row', gap: 12 }}>
-              <Button label="Cancel" variant="outline" onPress={closeFieldModal} style={{ flex: 1 }} />
-              <Button
-                label={editingField ? 'Update' : 'Add field'}
-                onPress={() => editingField ? updateFieldMutation.mutate() : addFieldMutation.mutate()}
-                loading={addFieldMutation.isPending || updateFieldMutation.isPending}
-                disabled={!fieldName || !fieldCrop}
-                style={{ flex: 1 }}
-              />
-            </View>
-          </ModalContent>
-        </ModalOverlay>
+        <KeyboardAvoidingView
+          style={{ flex: 1 }}
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        >
+          <ModalOverlay>
+            <ModalContent>
+              <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+                <View style={{ gap: 16 }}>
+                  <Text variant="headline">{editingField ? 'Edit field' : 'Add new field'}</Text>
+                  <InputField label="Field name" value={fieldName} onChangeText={setFieldName} placeholder="e.g. North Block" />
+                  <InputField label="Crop" value={fieldCrop} onChangeText={setFieldCrop} placeholder="e.g. Maize" />
+                  <InputField label="Area (hectares)" value={fieldArea} onChangeText={setFieldArea} keyboardType="decimal-pad" />
+                  <View style={{ flexDirection: 'row', gap: 12 }}>
+                    <Button label="Cancel" variant="ghost" onPress={closeFieldModal} style={{ flex: 1 }} />
+                    <Button
+                      label={editingField ? 'Update' : 'Add field'}
+                      onPress={() => (editingField ? updateFieldMutation.mutate() : addFieldMutation.mutate())}
+                      loading={addFieldMutation.isPending || updateFieldMutation.isPending}
+                      disabled={!fieldName || !fieldCrop}
+                      style={{ flex: 1 }}
+                    />
+                  </View>
+                </View>
+              </ScrollView>
+            </ModalContent>
+          </ModalOverlay>
+        </KeyboardAvoidingView>
       </Modal>
 
       {/* Add/Edit Journal Modal */}
       <Modal visible={showJournalModal} transparent animationType="slide" onRequestClose={closeJournalModal}>
-        <ModalOverlay>
-          <ModalContent>
-            <Text variant="headline">{editingEntry ? 'Edit journal entry' : 'Add journal entry'}</Text>
-            <InputField
-              label="Note"
-              value={journalNote}
-              onChangeText={setJournalNote}
-              placeholder="What did you observe or do?"
-              multiline
-              numberOfLines={3}
-            />
-            <Text variant="caption" tone="muted">Type</Text>
-            <View style={{ flexDirection: 'row', gap: 8 }}>
-              {['observation', 'action', 'issue', 'harvest'].map((t) => (
-                <Chip key={t} label={t} tone={journalType === t ? 'success' : 'default'} onPress={() => setJournalType(t)} />
-              ))}
-            </View>
-            <View style={{ flexDirection: 'row', gap: 12 }}>
-              <Button label="Cancel" variant="outline" onPress={closeJournalModal} style={{ flex: 1 }} />
-              <Button
-                label={editingEntry ? 'Update' : 'Add entry'}
-                onPress={() => editingEntry ? updateJournalMutation.mutate() : addJournalMutation.mutate()}
-                loading={addJournalMutation.isPending || updateJournalMutation.isPending}
-                disabled={!journalNote}
-                style={{ flex: 1 }}
-              />
-            </View>
-          </ModalContent>
-        </ModalOverlay>
+        <KeyboardAvoidingView
+          style={{ flex: 1 }}
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        >
+          <ModalOverlay>
+            <ModalContent>
+              <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+                <View style={{ gap: 16 }}>
+                  <Text variant="headline">{editingEntry ? 'Edit journal entry' : 'Add journal entry'}</Text>
+                  <InputField
+                    label="Note"
+                    value={journalNote}
+                    onChangeText={setJournalNote}
+                    placeholder="What did you observe or do?"
+                    multiline
+                    numberOfLines={3}
+                  />
+                  <Text variant="caption" tone="muted">Type</Text>
+                  <View style={{ flexDirection: 'row', gap: 8, flexWrap: 'wrap' }}>
+                    {['observation', 'action', 'issue', 'harvest'].map((t) => (
+                      <Chip key={t} label={t} tone={journalType === t ? 'success' : 'default'} onPress={() => setJournalType(t)} />
+                    ))}
+                  </View>
+                  <View style={{ flexDirection: 'row', gap: 12 }}>
+                    <Button label="Cancel" variant="ghost" onPress={closeJournalModal} style={{ flex: 1 }} />
+                    <Button
+                      label={editingEntry ? 'Update' : 'Add entry'}
+                      onPress={() => (editingEntry ? updateJournalMutation.mutate() : addJournalMutation.mutate())}
+                      loading={addJournalMutation.isPending || updateJournalMutation.isPending}
+                      disabled={!journalNote}
+                      style={{ flex: 1 }}
+                    />
+                  </View>
+                </View>
+              </ScrollView>
+            </ModalContent>
+          </ModalOverlay>
+        </KeyboardAvoidingView>
       </Modal>
+
+      <ConfirmModal
+        visible={Boolean(deleteTarget)}
+        title={deleteTarget?.type === 'field' ? 'Delete field?' : 'Delete journal entry?'}
+        message={`Are you sure you want to delete "${deleteTarget?.name ?? ''}"? This cannot be undone.`}
+        confirmLabel="Delete"
+        loading={deleteFieldMutation.isPending || deleteJournalMutation.isPending}
+        onCancel={() => setDeleteTarget(null)}
+        onConfirm={() => {
+          if (!deleteTarget) return;
+          if (deleteTarget.type === 'field') deleteFieldMutation.mutate(deleteTarget.id);
+          else deleteJournalMutation.mutate(deleteTarget.id);
+        }}
+      />
     </Screen>
   );
 }

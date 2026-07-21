@@ -4,28 +4,32 @@ import * as Location from 'expo-location';
 import React, { useCallback, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
-  Alert,
   Animated,
   KeyboardAvoidingView,
   Platform,
+  Pressable,
   ScrollView,
   TouchableOpacity,
   View,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { LocationMapPreview } from '@/components/LocationMapPreview';
 import styled from '@/design-system/styled';
 import { useTheme } from 'styled-components/native';
 
+import { useToast } from '@/components/Toast';
 import { Button, Chip, InputField, Surface, Text } from '@/design-system/components';
 import { ApiError } from '@/services/apiClient';
 import { authApi } from '@/services/authApi';
 import { useAppStore } from '@/store/useAppStore';
 import type { ExperienceLevel } from '@/types/farmer';
+import { isFarmProfileComplete } from '@/utils/farmProfile';
+import { clearAuthQueryCache } from '@/utils/queryClient';
 
 const LOCATIONIQ_KEY = process.env.EXPO_PUBLIC_LOCATIONIQ_KEY || '';
 
-const Container = styled.SafeAreaView`
+const Screen = styled(SafeAreaView)`
   flex: 1;
   background-color: ${({ theme }) => theme.colors.background};
 `;
@@ -120,6 +124,7 @@ const TOTAL_STEPS = 3;
 export default function RegisterScreen() {
   const router = useRouter();
   const theme = useTheme();
+  const toast = useToast();
   const setAuthState = useAppStore((s) => s.setAuthState);
   const setProfile = useAppStore((s) => s.setFarmerProfile);
 
@@ -197,7 +202,7 @@ export default function RegisterScreen() {
     try {
       const { status } = await Location.requestForegroundPermissionsAsync();
       if (status !== 'granted') {
-        Alert.alert('Permission Denied', 'Please allow location access to use this feature.');
+        toast.error('Permission denied', 'Please allow location access to use this feature.');
         return;
       }
       const position = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High });
@@ -225,11 +230,11 @@ export default function RegisterScreen() {
         600,
       );
     } catch (e: any) {
-      Alert.alert('Location Error', e.message || 'Could not get your location. Please try again.');
+      toast.error('Location error', e.message || 'Could not get your location. Please try again.');
     } finally {
       setGettingGPS(false);
     }
-  }, []);
+  }, [toast]);
 
   const mutation = useMutation({
     mutationFn: () => {
@@ -260,14 +265,21 @@ export default function RegisterScreen() {
     },
     onMutate: () => setAuthState({ status: 'authenticating' }),
     onSuccess: (response) => {
+      clearAuthQueryCache();
       setAuthState({ status: 'authenticated', token: response.token });
       setProfile(response.profile);
-      router.replace('/auth/profile');
+      toast.success('Account created', 'Welcome to AgroAide. Check your email for a welcome message.');
+      if (!isFarmProfileComplete(response.profile)) {
+        router.replace('/auth/complete-farm');
+      } else {
+        router.replace('/(app)/(tabs)/dashboard');
+      }
     },
     onError: (error) => {
+      clearAuthQueryCache();
       setAuthState({ status: 'signedOut' });
       const message = error instanceof ApiError ? error.message : 'Please review your details and try again.';
-      Alert.alert('Registration failed', message);
+      toast.error('Registration failed', message);
     },
   });
 
@@ -306,6 +318,15 @@ export default function RegisterScreen() {
         value={form.password}
         onChangeText={(t) => updateForm('password', t)}
         secureTextEntry={!showPassword}
+        rightElement={
+          <Pressable onPress={() => setShowPassword((p) => !p)} hitSlop={8}>
+            <Ionicons
+              name={showPassword ? 'eye-off-outline' : 'eye-outline'}
+              size={20}
+              color={theme.colors.textSecondary}
+            />
+          </Pressable>
+        }
       />
       <InputField
         label="Confirm password"
@@ -313,16 +334,9 @@ export default function RegisterScreen() {
         onChangeText={(t) => updateForm('passwordConfirmation', t)}
         secureTextEntry={!showPassword}
       />
-      <View style={{ flexDirection: 'row', gap: 12, flexWrap: 'wrap' }}>
-        <Chip
-          label={showPassword ? 'Hide password' : 'Show password'}
-          tone={showPassword ? 'success' : 'default'}
-          onPress={() => setShowPassword((p) => !p)}
-        />
-        {form.passwordConfirmation && form.password !== form.passwordConfirmation ? (
-          <Chip label="Passwords do not match" tone="danger" />
-        ) : null}
-      </View>
+      {form.passwordConfirmation && form.password !== form.passwordConfirmation ? (
+        <Chip label="Passwords do not match" tone="danger" />
+      ) : null}
       <Button label="Next" onPress={() => animateStep(2)} fullWidth disabled={!canGoToStep2} />
     </Card>
   );
@@ -463,8 +477,12 @@ export default function RegisterScreen() {
   const stepSubtitles = ['Join AgroAide', 'Tell us about your farm', 'Where is your farm?'];
 
   return (
-    <Container>
-      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+    <Screen edges={['top', 'left', 'right', 'bottom']}>
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 8 : 0}
+      >
         <Content>
           {renderStepIndicator()}
           <Text variant="eyebrow" tone="accent">
@@ -490,6 +508,6 @@ export default function RegisterScreen() {
           </Surface>
         </Content>
       </KeyboardAvoidingView>
-    </Container>
+    </Screen>
   );
 }

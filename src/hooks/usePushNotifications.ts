@@ -5,6 +5,7 @@ import { useRouter } from 'expo-router';
 
 import { authApi } from '@/services/authApi';
 import { useAppStore } from '@/store/useAppStore';
+import { routeForNotification } from '@/utils/notificationRouting';
 
 const isExpoGo = Constants.appOwnership === 'expo';
 
@@ -54,10 +55,26 @@ async function registerForPushNotifications(): Promise<string | null> {
       });
     }
 
-    const token = (await Notifications.getExpoPushTokenAsync()).data;
-    return token;
+    // Native FCM (Android) / APNs (iOS) token for direct FCM HTTP v1
+    const deviceToken = await Notifications.getDevicePushTokenAsync();
+    return typeof deviceToken?.data === 'string' ? deviceToken.data : null;
   } catch {
     return null;
+  }
+}
+
+function openFromNotification(router: ReturnType<typeof useRouter>, response: any) {
+  const content = response?.notification?.request?.content ?? {};
+  const data = (content.data ?? {}) as Record<string, unknown>;
+  const route = routeForNotification(String(data.type ?? ''), data, {
+    title: content.title,
+    message: content.body,
+  });
+
+  if (route.params && Object.keys(route.params).length > 0) {
+    router.push({ pathname: route.pathname, params: route.params } as any);
+  } else {
+    router.push(route.pathname as any);
   }
 }
 
@@ -65,36 +82,39 @@ export function usePushNotifications() {
   const router = useRouter();
   const accessToken = useAppStore((s) => s.accessToken);
   const authStatus = useAppStore((s) => s.authStatus);
+  const notificationPreferences = useAppStore((s) => s.notificationPreferences);
   const responseListener = useRef<any>();
+  const handledColdStartRef = useRef(false);
 
   useEffect(() => {
     if (authStatus !== 'authenticated' || !accessToken) return;
     if (isExpoGo) return;
 
     registerForPushNotifications().then(async (pushToken) => {
-      if (pushToken) {
-        try {
-          await authApi.updateProfile(accessToken, { pushToken });
-        } catch {
-          // Non-critical
-        }
+      try {
+        await authApi.updateProfile(accessToken, {
+          ...(pushToken ? { pushToken } : {}),
+          notificationPreferences,
+        });
+      } catch {
+        // Non-critical
       }
     });
 
     try {
       const Notifications = require('expo-notifications');
-      responseListener.current = Notifications.addNotificationResponseReceivedListener(
-        (response: any) => {
-          const data = response.notification.request.content.data;
-          if (data?.type === 'disease_outbreak') {
-            router.push('/(app)/outbreak-map');
-          } else if (data?.type === 'task_reminder') {
-            router.push('/(app)/(tabs)/calendar');
-          } else {
-            router.push('/(app)/notifications');
-          }
-        },
-      );
+
+      // Cold start: app opened from a killed state by tapping a notification
+      if (!handledColdStartRef.current) {
+        handledColdStartRef.current = true;
+        Notifications.getLastNotificationResponseAsync?.().then((response: any) => {
+          if (response) openFromNotification(router, response);
+        });
+      }
+
+      responseListener.current = Notifications.addNotificationResponseReceivedListener((response: any) => {
+        openFromNotification(router, response);
+      });
     } catch {
       // Not available in Expo Go
     }
@@ -109,5 +129,5 @@ export function usePushNotifications() {
         }
       }
     };
-  }, [authStatus, accessToken, router]);
+  }, [authStatus, accessToken, router, notificationPreferences]);
 }

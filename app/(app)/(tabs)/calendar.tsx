@@ -1,11 +1,21 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import React, { useState } from 'react';
-import { ActivityIndicator, Alert, Modal, ScrollView, TouchableOpacity, View } from 'react-native';
+import {
+  ActivityIndicator,
+  KeyboardAvoidingView,
+  Modal,
+  Platform,
+  ScrollView,
+  TouchableOpacity,
+  View,
+} from 'react-native';
 import { Calendar } from 'react-native-calendars';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme } from 'styled-components/native';
 
+import { ConfirmModal } from '@/components/ConfirmModal';
+import { useToast } from '@/components/Toast';
 import { Button, Chip, InputField, Surface, Text } from '@/design-system/components';
 import styled from '@/design-system/styled';
 import { calendarApi, type CalendarTask } from '@/services/calendarApi';
@@ -75,6 +85,7 @@ const impactColors: Record<string, string> = {
 
 export default function CalendarScreen() {
   const theme = useTheme();
+  const toast = useToast();
   const token = useAppStore((s) => s.accessToken) ?? '';
   const queryClient = useQueryClient();
 
@@ -88,6 +99,7 @@ export default function CalendarScreen() {
   const [period, setPeriod] = useState<string>('morning');
   const [duration, setDuration] = useState('30');
   const [impact, setImpact] = useState<string>('medium');
+  const [deleteTarget, setDeleteTarget] = useState<{ id: string; name: string } | null>(null);
 
   const { data, isLoading, refetch } = useQuery({
     queryKey: ['calendar', selectedDate],
@@ -106,7 +118,7 @@ export default function CalendarScreen() {
       period, durationMinutes: parseInt(duration) || 30, impact,
     }),
     onSuccess: () => { invalidate(); closeModal(); },
-    onError: () => Alert.alert('Error', 'Could not create task.'),
+    onError: () => toast.error('Error', 'Could not create task.'),
   });
 
   const updateMutation = useMutation({
@@ -115,7 +127,7 @@ export default function CalendarScreen() {
       period, durationMinutes: parseInt(duration) || 30, impact,
     }),
     onSuccess: () => { invalidate(); closeModal(); },
-    onError: () => Alert.alert('Error', 'Could not update task.'),
+    onError: () => toast.error('Error', 'Could not update task.'),
   });
 
   const completeMutation = useMutation({
@@ -126,8 +138,12 @@ export default function CalendarScreen() {
 
   const deleteMutation = useMutation({
     mutationFn: (id: string) => calendarApi.deleteTask(token, id),
-    onSuccess: () => invalidate(),
-    onError: () => Alert.alert('Error', 'Could not delete task.'),
+    onSuccess: () => {
+      invalidate();
+      setDeleteTarget(null);
+      toast.success('Deleted', 'Task removed.');
+    },
+    onError: () => toast.error('Error', 'Could not delete task.'),
   });
 
   const openAdd = () => {
@@ -145,10 +161,7 @@ export default function CalendarScreen() {
   const closeModal = () => { setShowModal(false); setEditingTask(null); };
 
   const confirmDelete = (id: string, name: string) => {
-    Alert.alert('Delete task', `Delete "${name}"?`, [
-      { text: 'Cancel', style: 'cancel' },
-      { text: 'Delete', style: 'destructive', onPress: () => deleteMutation.mutate(id) },
-    ]);
+    setDeleteTarget({ id, name });
   };
 
   const dayTasks = data?.dayPlan ?? [];
@@ -266,49 +279,66 @@ export default function CalendarScreen() {
       </FAB>
 
       <Modal visible={showModal} transparent animationType="slide" onRequestClose={closeModal}>
-        <ModalOverlay>
-          <ModalContent>
-            <ScrollView showsVerticalScrollIndicator={false}>
-              <View style={{ gap: 16 }}>
-                <Text variant="headline">{editingTask ? 'Edit task' : 'New task'}</Text>
-                <InputField label="Title" value={title} onChangeText={setTitle} placeholder="e.g. Inspect maize field" />
-                <InputField
-                  label="Description (optional)"
-                  value={description}
-                  onChangeText={setDescription}
-                  placeholder="Add details..."
-                  multiline
-                  numberOfLines={2}
-                />
-                <Text variant="caption" tone="muted">Date: {selectedDate}</Text>
-                <Text variant="caption" tone="muted">Time of day</Text>
-                <View style={{ flexDirection: 'row', gap: 8 }}>
-                  {periods.map((p) => (
-                    <Chip key={p} label={p} tone={period === p ? 'success' : 'default'} onPress={() => setPeriod(p)} />
-                  ))}
-                </View>
-                <InputField label="Duration (minutes)" value={duration} onChangeText={setDuration} keyboardType="number-pad" />
-                <Text variant="caption" tone="muted">Priority</Text>
-                <View style={{ flexDirection: 'row', gap: 8 }}>
-                  {impacts.map((i) => (
-                    <Chip key={i} label={i} tone={impact === i ? 'success' : 'default'} onPress={() => setImpact(i)} />
-                  ))}
-                </View>
-                <View style={{ flexDirection: 'row', gap: 12, marginTop: 8 }}>
-                  <Button label="Cancel" variant="outline" onPress={closeModal} style={{ flex: 1 }} />
-                  <Button
-                    label={editingTask ? 'Update' : 'Add task'}
-                    onPress={() => editingTask ? updateMutation.mutate() : createMutation.mutate()}
-                    loading={createMutation.isPending || updateMutation.isPending}
-                    disabled={!title}
-                    style={{ flex: 1 }}
+        <KeyboardAvoidingView
+          style={{ flex: 1 }}
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        >
+          <ModalOverlay>
+            <ModalContent>
+              <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+                <View style={{ gap: 16 }}>
+                  <Text variant="headline">{editingTask ? 'Edit task' : 'New task'}</Text>
+                  <InputField label="Title" value={title} onChangeText={setTitle} placeholder="e.g. Inspect maize field" />
+                  <InputField
+                    label="Description (optional)"
+                    value={description}
+                    onChangeText={setDescription}
+                    placeholder="Add details..."
+                    multiline
+                    numberOfLines={2}
                   />
+                  <Text variant="caption" tone="muted">Date: {selectedDate}</Text>
+                  <Text variant="caption" tone="muted">Time of day</Text>
+                  <View style={{ flexDirection: 'row', gap: 8, flexWrap: 'wrap' }}>
+                    {periods.map((p) => (
+                      <Chip key={p} label={p} tone={period === p ? 'success' : 'default'} onPress={() => setPeriod(p)} />
+                    ))}
+                  </View>
+                  <InputField label="Duration (minutes)" value={duration} onChangeText={setDuration} keyboardType="number-pad" />
+                  <Text variant="caption" tone="muted">Priority</Text>
+                  <View style={{ flexDirection: 'row', gap: 8, flexWrap: 'wrap' }}>
+                    {impacts.map((i) => (
+                      <Chip key={i} label={i} tone={impact === i ? 'success' : 'default'} onPress={() => setImpact(i)} />
+                    ))}
+                  </View>
+                  <View style={{ flexDirection: 'row', gap: 12, marginTop: 8 }}>
+                    <Button label="Cancel" variant="ghost" onPress={closeModal} style={{ flex: 1 }} />
+                    <Button
+                      label={editingTask ? 'Update' : 'Add task'}
+                      onPress={() => (editingTask ? updateMutation.mutate() : createMutation.mutate())}
+                      loading={createMutation.isPending || updateMutation.isPending}
+                      disabled={!title}
+                      style={{ flex: 1 }}
+                    />
+                  </View>
                 </View>
-              </View>
-            </ScrollView>
-          </ModalContent>
-        </ModalOverlay>
+              </ScrollView>
+            </ModalContent>
+          </ModalOverlay>
+        </KeyboardAvoidingView>
       </Modal>
+
+      <ConfirmModal
+        visible={Boolean(deleteTarget)}
+        title="Delete task?"
+        message={`Are you sure you want to delete "${deleteTarget?.name ?? ''}"? This cannot be undone.`}
+        confirmLabel="Delete"
+        loading={deleteMutation.isPending}
+        onCancel={() => setDeleteTarget(null)}
+        onConfirm={() => {
+          if (deleteTarget) deleteMutation.mutate(deleteTarget.id);
+        }}
+      />
     </Screen>
   );
 }

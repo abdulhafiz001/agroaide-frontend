@@ -21,12 +21,13 @@ import {
 } from 'lucide-react-native';
 import { useQuery } from '@tanstack/react-query';
 import React, { useState } from 'react';
-import { ActivityIndicator, Alert, Modal, ScrollView, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, KeyboardAvoidingView, Modal, Platform, ScrollView, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useTheme } from 'styled-components/native';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 
+import { useToast } from '@/components/Toast';
 import { Button, Chip, InputField, ProgressDonut, Surface, Text } from '@/design-system/components';
 import styled from '@/design-system/styled';
 import { dashboardApi } from '@/services/dashboardApi';
@@ -35,6 +36,8 @@ import { marketApi, type MarketPrice } from '@/services/marketApi';
 import { ApiError } from '@/services/apiClient';
 import { useAppStore } from '@/store/useAppStore';
 import { useTranslation } from '@/i18n/useTranslation';
+import { clearAuthQueryCache } from '@/utils/queryClient';
+import { isFarmProfileComplete } from '@/utils/farmProfile';
 
 const Screen = styled(SafeAreaView)`
   flex: 1;
@@ -118,9 +121,12 @@ const ModalContent = styled(Surface)`
 export default function Dashboard() {
   const router = useRouter();
   const theme = useTheme();
+  const toast = useToast();
   const queryClient = useQueryClient();
   const accessToken = useAppStore((state) => state.accessToken);
+  const farmerProfile = useAppStore((state) => state.farmerProfile);
   const signOut = useAppStore((state) => state.signOut);
+  const userKey = farmerProfile?.id ?? accessToken ?? 'anon';
 
   const { t, getGreeting } = useTranslation();
   const [showAddFarmModal, setShowAddFarmModal] = useState(false);
@@ -134,30 +140,31 @@ export default function Dashboard() {
     isError,
     error,
     refetch,
-    isFetching,
   } = useQuery({
-    queryKey: ['dashboardSnapshot'],
+    queryKey: ['dashboardSnapshot', userKey],
     queryFn: () => dashboardApi.getSnapshot(accessToken ?? ''),
     enabled: Boolean(accessToken),
   });
 
+  const profileCompleteLocally = isFarmProfileComplete(farmerProfile);
+  const profileReady = profileCompleteLocally || Boolean(payload?.profileComplete);
+
   const { data: farmData } = useQuery({
-    queryKey: ['farmOverview'],
+    queryKey: ['farmOverview', userKey],
     queryFn: () => farmApi.getOverview(accessToken ?? ''),
-    enabled: Boolean(accessToken),
+    enabled: Boolean(accessToken) && profileReady,
   });
 
   const { data: marketData } = useQuery({
-    queryKey: ['marketIntel'],
+    queryKey: ['marketIntel', userKey],
     queryFn: () => marketApi.getMarketIntel(accessToken ?? ''),
-    enabled: Boolean(accessToken),
+    enabled: Boolean(accessToken) && profileReady,
   });
 
-  // AI insights load separately (non-blocking). Snapshot returns fast with fallback.
   const { data: aiInsightsData } = useQuery({
-    queryKey: ['dashboardAiInsights'],
+    queryKey: ['dashboardAiInsights', userKey],
     queryFn: () => dashboardApi.getAiInsights(accessToken ?? ''),
-    enabled: Boolean(accessToken) && Boolean(payload),
+    enabled: Boolean(accessToken) && profileReady,
     staleTime: 1000 * 60 * 60,
   });
 
@@ -173,10 +180,10 @@ export default function Dashboard() {
       setShowAddFarmModal(false);
       setNewFieldName(''); setNewFieldCrop(''); setNewFieldArea('');
     },
-    onError: () => Alert.alert('Error', 'Could not add farm field.'),
+    onError: () => toast.error('Error', 'Could not add farm field.'),
   });
 
-  if (loading || isFetching) {
+  if (loading && !payload) {
     return (
       <Screen>
         <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', gap: 12 }}>
@@ -201,7 +208,11 @@ export default function Dashboard() {
             <Button
               label="Sign in again"
               variant="secondary"
-              onPress={() => { signOut(); router.replace('/auth/login'); }}
+              onPress={() => {
+                clearAuthQueryCache();
+                signOut();
+                router.replace('/auth/login');
+              }}
               fullWidth
             />
           ) : null}
@@ -222,9 +233,40 @@ export default function Dashboard() {
   }
 
   const { user, weatherAlert, priorityTask, soilHealth, weatherForecast } = payload;
-  const aiInsights = aiInsightsData?.aiInsights ?? payload.aiInsights;
-  const unreadNotifications = (payload as any).unreadNotifications ?? 0;
-  const outbreakAlerts = (payload as any).outbreakAlerts ?? [];
+  const aiInsights = aiInsightsData?.aiInsights ?? payload.aiInsights ?? [];
+  const unreadNotifications = payload.unreadNotifications ?? 0;
+  const outbreakAlerts = payload.outbreakAlerts ?? [];
+  // Prefer the live store profile so a just-saved farm isn't blocked by a stale snapshot.
+  const showFullDashboard =
+    profileCompleteLocally || Boolean(payload.profileComplete && payload.hasFarmLocation);
+
+  if (!showFullDashboard) {
+    return (
+      <Screen>
+        <Container>
+          <Header>
+            <Text variant="caption" tone="muted">{getGreeting()}</Text>
+            <Text variant="display">{user.name}</Text>
+            <Text variant="body" tone="muted">
+              Finish setting up your farm to unlock local weather, soil conditions, disease alerts, and AI insights.
+            </Text>
+          </Header>
+          <Surface rounded="xl" style={{ marginTop: 16, gap: 16, padding: 24 }}>
+            <Sprout size={40} color={theme.colors.primary} />
+            <Text variant="headline">Complete your farm profile</Text>
+            <Text variant="body" tone="muted">
+              Add your crops, soil, and farm location so AgroAide can warn you about nearby crop diseases within 5km and give advice for your fields.
+            </Text>
+            <Button
+              label="Complete farm details"
+              onPress={() => router.push('/auth/complete-farm')}
+              fullWidth
+            />
+          </Surface>
+        </Container>
+      </Screen>
+    );
+  }
 
   return (
     <Screen>
@@ -535,6 +577,7 @@ export default function Dashboard() {
           </ScrollView>
         </Section>
 
+        {aiInsights.length > 0 ? (
         <Section style={{ marginBottom: 32 }}>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
             <Sparkles size={18} color={theme.colors.primary} />
@@ -568,28 +611,35 @@ export default function Dashboard() {
             ))}
           </View>
         </Section>
+        ) : null}
       </Container>
 
       {/* Add Farm Modal */}
       <Modal visible={showAddFarmModal} transparent animationType="slide" onRequestClose={() => setShowAddFarmModal(false)}>
-        <ModalOverlay>
-          <ModalContent>
-            <Text variant="headline">Add new farm field</Text>
-            <InputField label="Field name" value={newFieldName} onChangeText={setNewFieldName} placeholder="e.g. North Block" />
-            <InputField label="Crop" value={newFieldCrop} onChangeText={setNewFieldCrop} placeholder="e.g. Maize" />
-            <InputField label="Area (hectares)" value={newFieldArea} onChangeText={setNewFieldArea} keyboardType="decimal-pad" />
-            <View style={{ flexDirection: 'row', gap: 12 }}>
-              <Button label="Cancel" variant="outline" onPress={() => setShowAddFarmModal(false)} style={{ flex: 1 }} />
-              <Button
-                label="Add farm"
-                onPress={() => addFieldMutation.mutate()}
-                loading={addFieldMutation.isPending}
-                disabled={!newFieldName || !newFieldCrop}
-                style={{ flex: 1 }}
-              />
-            </View>
-          </ModalContent>
-        </ModalOverlay>
+        <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+          <ModalOverlay>
+            <ModalContent>
+              <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+                <View style={{ gap: 16 }}>
+                  <Text variant="headline">Add new farm field</Text>
+                  <InputField label="Field name" value={newFieldName} onChangeText={setNewFieldName} placeholder="e.g. North Block" />
+                  <InputField label="Crop" value={newFieldCrop} onChangeText={setNewFieldCrop} placeholder="e.g. Maize" />
+                  <InputField label="Area (hectares)" value={newFieldArea} onChangeText={setNewFieldArea} keyboardType="decimal-pad" />
+                  <View style={{ flexDirection: 'row', gap: 12 }}>
+                    <Button label="Cancel" variant="ghost" onPress={() => setShowAddFarmModal(false)} style={{ flex: 1 }} />
+                    <Button
+                      label="Add farm"
+                      onPress={() => addFieldMutation.mutate()}
+                      loading={addFieldMutation.isPending}
+                      disabled={!newFieldName || !newFieldCrop}
+                      style={{ flex: 1 }}
+                    />
+                  </View>
+                </View>
+              </ScrollView>
+            </ModalContent>
+          </ModalOverlay>
+        </KeyboardAvoidingView>
       </Modal>
     </Screen>
   );

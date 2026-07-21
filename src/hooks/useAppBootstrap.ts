@@ -4,6 +4,7 @@ import { useFonts, Inter_400Regular, Inter_500Medium, Inter_600SemiBold, Inter_7
 
 import { authApi } from '@/services/authApi';
 import { useAppStore, useStoreHydration } from '@/store/useAppStore';
+import { clearAuthQueryCache } from '@/utils/queryClient';
 
 SplashScreen.preventAutoHideAsync().catch(() => {
   // ignore if already prevented
@@ -36,6 +37,7 @@ export const useAppBootstrap = () => {
         useAppStore.getState().setFarmerProfile(response.profile);
       })
       .catch(() => {
+        clearAuthQueryCache();
         useAppStore.getState().signOut();
       });
   }, [hydrated]);

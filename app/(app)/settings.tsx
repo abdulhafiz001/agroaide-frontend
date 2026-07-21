@@ -3,11 +3,12 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { Alert, Switch, TouchableOpacity, View } from 'react-native';
+import { KeyboardAvoidingView, Platform, Switch, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme } from 'styled-components/native';
 
 import * as Location from 'expo-location';
+import { useToast } from '@/components/Toast';
 import { Button, Chip, InputField, Surface, Text } from '@/design-system/components';
 import { authApi } from '@/services/authApi';
 import { systemApi } from '@/services/systemApi';
@@ -16,6 +17,7 @@ import { useAppStore, type NotificationPreferences } from '@/store/useAppStore';
 import { ApiError } from '@/services/apiClient';
 import { LANGUAGE_OPTIONS, type SupportedLanguage } from '@/i18n/translations';
 import { useTranslation } from '@/i18n/useTranslation';
+import { clearAuthQueryCache } from '@/utils/queryClient';
 
 import styled from '@/design-system/styled';
 
@@ -25,6 +27,7 @@ const Screen = styled(SafeAreaView)`
 `;
 
 const Content = styled.ScrollView.attrs(({ theme }) => ({
+  keyboardShouldPersistTaps: 'handled' as const,
   contentContainerStyle: {
     padding: theme.spacing.lg,
     paddingBottom: theme.spacing.xxl * 1.5,
@@ -92,6 +95,7 @@ const toneSegments = [
 ] as const;
 
 export default function ProfileScreen() {
+  const toast = useToast();
   const router = useRouter();
   const theme = useTheme();
   const queryClient = useQueryClient();
@@ -197,11 +201,11 @@ export default function ProfileScreen() {
       setProfile(res.profile);
       setEditMode(false);
       queryClient.invalidateQueries({ queryKey: ['settingsMe'] });
-      Alert.alert('Success', 'Profile updated successfully.');
+      toast.success('Success', 'Profile updated successfully.');
     },
     onError: (err) => {
       const msg = err instanceof ApiError ? err.message : 'Could not update profile.';
-      Alert.alert('Error', msg);
+      toast.error('Error', msg);
     },
   });
 
@@ -215,11 +219,11 @@ export default function ProfileScreen() {
     onSuccess: () => {
       setCurrentPassword(''); setNewPassword(''); setConfirmNewPassword('');
       setShowPasswordSection(false);
-      Alert.alert('Success', 'Password changed successfully.');
+      toast.success('Success', 'Password changed successfully.');
     },
     onError: (err) => {
       const msg = err instanceof ApiError ? err.message : 'Could not change password.';
-      Alert.alert('Error', msg);
+      toast.error('Error', msg);
     },
   });
 
@@ -230,7 +234,7 @@ export default function ProfileScreen() {
     },
     onSuccess: (response) => {
       setLastSync(response?.syncedAt ?? new Date().toISOString());
-      Alert.alert('Synced', response?.message ?? 'Offline brief synced.');
+      toast.success('Synced', response?.message ?? 'Offline brief synced.');
     },
   });
 
@@ -240,13 +244,17 @@ export default function ProfileScreen() {
       return systemApi.requestExport(accessToken);
     },
     onSuccess: (response) => {
-      Alert.alert('Export', response?.message ?? 'Export scheduled.');
+      toast.info('Export', response?.message ?? 'Export scheduled.');
     },
   });
 
   const logoutMutation = useMutation({
     mutationFn: async () => { if (accessToken) await authApi.logout(accessToken); },
-    onSettled: () => { signOut(); router.replace('/auth/login'); },
+    onSettled: () => {
+      clearAuthQueryCache();
+      signOut();
+      router.replace('/auth/login');
+    },
   });
 
   const { t } = useTranslation();
@@ -258,7 +266,7 @@ export default function ProfileScreen() {
       const res = await authApi.updateProfile(accessToken, { preferredLanguage: langCode });
       setProfile(res.profile);
     } catch {
-      Alert.alert('Error', 'Could not update language preference.');
+      toast.error('Error', 'Could not update language preference.');
     }
   }, [accessToken, setProfile]);
 
@@ -266,7 +274,7 @@ export default function ProfileScreen() {
     try {
       const { status } = await Location.requestForegroundPermissionsAsync();
       if (status !== 'granted') {
-        Alert.alert('Permission Denied', 'Allow location access to use this feature.');
+        toast.error('Permission denied', 'Allow location access to use this feature.');
         return;
       }
       const position = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High });
@@ -283,14 +291,19 @@ export default function ProfileScreen() {
         setEditFarmLocation(`${lat.toFixed(4)}, ${lng.toFixed(4)}`);
       }
     } catch (e: any) {
-      Alert.alert('Location Error', e.message || 'Could not get location.');
+      toast.error('Location error', e.message || 'Could not get location.');
     }
-  }, []);
+  }, [toast]);
 
   const initials = profile?.fullName?.split(' ').map((p) => p[0]).slice(0, 2).join('').toUpperCase();
 
   return (
     <Screen>
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 8 : 0}
+      >
       <Content>
         <LinearGradient
           colors={['#57b346', '#2c5c2a']}
@@ -476,7 +489,19 @@ export default function ProfileScreen() {
                   <Text variant="body">{setting.label}</Text>
                   <Text variant="caption" tone="muted">{setting.description}</Text>
                 </View>
-                <Switch value={notificationPreferences[setting.key]} onValueChange={(v) => updateNotificationPreferences({ [setting.key]: v })} />
+                <Switch
+                  value={notificationPreferences[setting.key]}
+                  onValueChange={(v) => {
+                    updateNotificationPreferences({ [setting.key]: v });
+                    if (accessToken) {
+                      authApi
+                        .updateProfile(accessToken, {
+                          notificationPreferences: { ...notificationPreferences, [setting.key]: v },
+                        })
+                        .catch(() => {});
+                    }
+                  }}
+                />
               </Row>
             </View>
           ))}
@@ -533,15 +558,15 @@ export default function ProfileScreen() {
         {/* Support */}
         <Section rounded="xl">
           <Text variant="headline">Support & learning</Text>
-          <ActionRow onPress={() => Alert.alert('Learning center', supportLinksQuery.data?.links?.find((l: any) => l.id === 'help')?.message ?? 'Opening tutorials...')}>
+          <ActionRow onPress={() => toast.info('Learning center', supportLinksQuery.data?.links?.find((l: any) => l.id === 'help')?.message ?? 'Opening tutorials...')}>
             <Text variant="body">Help & tutorials</Text>
             <Ionicons name="chevron-forward" size={18} color={theme.colors.textSecondary} />
           </ActionRow>
-          <ActionRow onPress={() => Alert.alert('Extension officer', supportLinksQuery.data?.links?.find((l: any) => l.id === 'extension')?.message ?? 'Connecting...')}>
+          <ActionRow onPress={() => toast.info('Extension officer', supportLinksQuery.data?.links?.find((l: any) => l.id === 'extension')?.message ?? 'Connecting...')}>
             <Text variant="body">Contact extension officer</Text>
             <Ionicons name="chevron-forward" size={18} color={theme.colors.textSecondary} />
           </ActionRow>
-          <ActionRow onPress={() => Alert.alert('Support', supportLinksQuery.data?.links?.find((l: any) => l.id === 'email')?.message ?? 'Email: support@agroaide.ng')}>
+          <ActionRow onPress={() => toast.info('Support', supportLinksQuery.data?.links?.find((l: any) => l.id === 'email')?.message ?? 'Email: support@agroaide.ng')}>
             <Text variant="body">Email support</Text>
             <Ionicons name="chevron-forward" size={18} color={theme.colors.textSecondary} />
           </ActionRow>
@@ -555,6 +580,7 @@ export default function ProfileScreen() {
           disabled={logoutMutation.isPending}
         />
       </Content>
+      </KeyboardAvoidingView>
     </Screen>
   );
 }

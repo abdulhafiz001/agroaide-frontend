@@ -24,10 +24,10 @@ export type RegisterPayload = {
 };
 
 export const authApi = {
-  login(email: string, password: string) {
+  login(identifier: string, password: string) {
     return apiRequest<AuthResponse>('/auth/login', {
       method: 'POST',
-      body: { email, password },
+      body: { identifier, password },
     });
   },
 
@@ -52,10 +52,22 @@ export const authApi = {
     });
   },
 
-  requestPasswordReset(email: string) {
+  requestPasswordReset(identifier: string) {
     return apiRequest<{ message: string }>('/auth/recovery', {
       method: 'POST',
-      body: { email },
+      body: { identifier },
+    });
+  },
+
+  resetPasswordWithCode(payload: {
+    identifier: string;
+    code: string;
+    password: string;
+    password_confirmation: string;
+  }) {
+    return apiRequest<{ message: string }>('/auth/recovery/reset', {
+      method: 'POST',
+      body: payload,
     });
   },
 

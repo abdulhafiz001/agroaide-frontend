@@ -1,6 +1,6 @@
-import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
+import { Ionicons } from '@expo/vector-icons';
 import { useMutation, useQuery } from '@tanstack/react-query';
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import {
   useAudioRecorder,
   AudioModule,
@@ -8,18 +8,28 @@ import {
   useAudioRecorderState,
   setAudioModeAsync,
 } from 'expo-audio';
-import React, { useEffect, useRef, useState } from 'react';
-import { Alert, Animated, TouchableOpacity } from 'react-native';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import {
+  Animated,
+  KeyboardAvoidingView,
+  Platform,
+  TouchableOpacity,
+  View,
+} from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from 'styled-components/native';
 
+import { AuthenticatedImage } from '@/components/AuthenticatedImage';
+import { FormattedMessage } from '@/components/FormattedMessage';
+import { useToast } from '@/components/Toast';
 import { Chip, Surface, Text } from '@/design-system/components';
 import styled from '@/design-system/styled';
 import { advisorApi } from '@/services/advisorApi';
+import { farmScanApi, type ScanDetail } from '@/services/farmScanApi';
 import { weatherApi } from '@/services/weatherApi';
 import { useAppStore } from '@/store/useAppStore';
 import { useTranslation } from '@/i18n/useTranslation';
 
-// --- 1. Enhanced Styled Components ---
 const Screen = styled.View`
   flex: 1;
   background-color: ${({ theme }) => theme.colors.background};
@@ -31,19 +41,15 @@ const AppHeader = styled(Surface)`
   padding-bottom: 8px;
   border-bottom-left-radius: 16px;
   border-bottom-right-radius: 16px;
-  elevation: 2;
-  shadow-color: #000;
-  shadow-offset: 0px 2px;
-  shadow-opacity: 0.05;
-  shadow-radius: 3px;
 `;
 
 const MessageList = styled.ScrollView.attrs({
   contentContainerStyle: {
     paddingHorizontal: 16,
     paddingTop: 16,
-    paddingBottom: 100,
+    paddingBottom: 24,
   },
+  keyboardShouldPersistTaps: 'handled' as const,
 })`
   flex: 1;
 `;
@@ -71,13 +77,7 @@ const BubbleContent = styled(Surface)<{ fromAgent: boolean }>`
   border-radius: 18px;
   border-bottom-left-radius: ${({ fromAgent }) => (fromAgent ? '4px' : '18px')};
   border-bottom-right-radius: ${({ fromAgent }) => (fromAgent ? '18px' : '4px')};
-  background-color: ${({ fromAgent, theme }) =>
-    fromAgent ? theme.colors.surface : theme.colors.primary};
-  elevation: 1;
-  shadow-color: #000;
-  shadow-offset: 0px 1px;
-  shadow-opacity: 0.05;
-  shadow-radius: 2px;
+  background-color: ${({ fromAgent, theme }) => (fromAgent ? theme.colors.surface : theme.colors.primary)};
 `;
 
 const SystemMessageCard = styled(Surface)`
@@ -103,7 +103,8 @@ const InputToolbar = styled.View`
 
 const ChatInput = styled.TextInput`
   flex: 1;
-  height: 48px;
+  min-height: 48px;
+  max-height: 120px;
   padding: ${({ theme }) => `${theme.spacing.sm}px ${theme.spacing.md}px`};
   border-radius: 24px;
   border-width: 1.5px;
@@ -133,7 +134,15 @@ const AttachmentButton = styled(TouchableOpacity)`
   margin-right: 12px;
 `;
 
-// --- 2. New Typing Indicator Component ---
+const ScanContextCard = styled(TouchableOpacity)`
+  margin: 10px 16px 4px;
+  border-radius: 18px;
+  overflow: hidden;
+  border-width: 1px;
+  border-color: ${({ theme }) => `${theme.colors.primary}35`};
+  background-color: ${({ theme }) => theme.colors.surface};
+`;
+
 const TypingIndicator = ({ isVisible }: { isVisible: boolean }) => {
   const opacity = useRef(new Animated.Value(0.2)).current;
 
@@ -174,7 +183,6 @@ const TypingIndicator = ({ isVisible }: { isVisible: boolean }) => {
   );
 };
 
-// --- 3. Main Component with Modernized Logic ---
 type Message = {
   id: string;
   text: string;
@@ -182,61 +190,101 @@ type Message = {
   timestamp?: Date;
 };
 
+function buildIntro(firstName?: string): Message {
+  return {
+    id: 'intro',
+    text: firstName
+      ? `Hi ${firstName}. I’m your AgroAide farm advisor — I can see your weather, fields, soil, and tasks. Ask me anything about today’s farm decisions.`
+      : 'Hi! I’m your AgroAide farm advisor — I can see your weather, fields, soil, and tasks. Ask me anything about today’s farm decisions.',
+    fromAgent: true,
+    timestamp: new Date(),
+  };
+}
+
 export default function ModernAdvisorScreen() {
   const theme = useTheme();
+  const toast = useToast();
   const router = useRouter();
+  const params = useLocalSearchParams<{ scanId?: string }>();
+  const insets = useSafeAreaInsets();
   const { t, lang } = useTranslation();
   const accessToken = useAppStore((state) => state.accessToken);
   const profile = useAppStore((state) => state.farmerProfile);
   const audioRecorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
   const recorderState = useAudioRecorderState(audioRecorder);
-  const [isTranscribing, setIsTranscribing] = useState(false);
-  const [messages, setMessages] = useState<Message[]>([
-    {
-      id: 'intro',
-      text: 'Hi! I’m your AgroAide advisor. Ask me anything about crops, pests, or weather decisions.',
-      fromAgent: true,
-      timestamp: new Date(Date.now() - 300000),
-    },
-  ]);
+  const listRef = useRef<any>(null);
+  const handledScanIdRef = useRef<string | null>(null);
+  const isRecordingRef = useRef(false);
+  const voiceBusyRef = useRef(false);
+
+  const firstName = profile?.fullName?.trim().split(' ')[0];
+  const [messages, setMessages] = useState<Message[]>([buildIntro(firstName)]);
+  const [historyLoaded, setHistoryLoaded] = useState(false);
   const [input, setInput] = useState('');
   const [isAgentTyping, setIsAgentTyping] = useState(false);
+  const [isTranscribing, setIsTranscribing] = useState(false);
+  const [isRecordingUi, setIsRecordingUi] = useState(false);
   const [activeSuggestion, setActiveSuggestion] = useState<string | null>(null);
+  const [activeScan, setActiveScan] = useState<ScanDetail | null>(null);
+
   const chatMutation = useMutation({
     mutationFn: (message: string) => advisorApi.chat(message, accessToken ?? ''),
   });
+
+  const historyQuery = useQuery({
+    queryKey: ['advisorHistory', accessToken],
+    queryFn: () => advisorApi.getHistory(accessToken ?? ''),
+    enabled: Boolean(accessToken),
+  });
+
   const suggestionsQuery = useQuery({
     queryKey: ['advisorSuggestions'],
     queryFn: () => advisorApi.getSuggestions(accessToken ?? ''),
     enabled: Boolean(accessToken),
   });
+
   const weatherQuery = useQuery({
     queryKey: ['advisorWeatherContext'],
     queryFn: () => weatherApi.getForecast(accessToken ?? ''),
     enabled: Boolean(accessToken),
   });
+
+  const scanIdParam = params.scanId ? String(params.scanId) : null;
+
+  const scanQuery = useQuery({
+    queryKey: ['advisorScanContext', scanIdParam],
+    queryFn: () => farmScanApi.getScan(accessToken ?? '', scanIdParam!),
+    enabled: Boolean(accessToken && scanIdParam),
+  });
+
   const suggestions = suggestionsQuery.data?.suggestions ?? [];
   const weatherSummary = weatherQuery.data?.weatherForecast?.[0];
+  const hasUserMessages = useMemo(() => messages.some((m) => !m.fromAgent), [messages]);
 
   useEffect(() => {
-    const firstName = profile?.fullName?.trim().split(' ')[0];
-    if (!firstName) {
+    if (!historyQuery.data || historyLoaded) return;
+    const history = historyQuery.data.messages ?? [];
+    if (history.length === 0) {
+      setHistoryLoaded(true);
       return;
     }
 
-    setMessages((prev) => {
-      if (!prev.length || prev[0].id !== 'intro') {
-        return prev;
-      }
+    setMessages([
+      buildIntro(firstName),
+      ...history.map((m) => ({
+        id: m.id,
+        text: m.text,
+        fromAgent: m.fromAgent,
+        timestamp: m.timestamp ? new Date(m.timestamp) : undefined,
+      })),
+    ]);
+    setHistoryLoaded(true);
+  }, [firstName, historyLoaded, historyQuery.data]);
 
-      const updatedIntro = {
-        ...prev[0],
-        text: `Hi ${firstName}! I’m your AgroAide advisor. Ask me anything about crops, pests, or weather decisions.`,
-      };
-
-      return [updatedIntro, ...prev.slice(1)];
-    });
-  }, [profile?.fullName]);
+  useEffect(() => {
+    if (!scanIdParam || !scanQuery.data?.scan) return;
+    setActiveScan(scanQuery.data.scan);
+  }, [scanIdParam, scanQuery.data]);
 
   useEffect(() => {
     (async () => {
@@ -247,31 +295,49 @@ export default function ModernAdvisorScreen() {
     })();
   }, []);
 
+  useEffect(() => {
+    if (!messages.length) return;
+    requestAnimationFrame(() => listRef.current?.scrollToEnd?.({ animated: true }));
+  }, [messages.length, isAgentTyping]);
+
   const startRecording = async () => {
+    if (isRecordingRef.current || voiceBusyRef.current || isTranscribing) return;
+    voiceBusyRef.current = true;
+
     try {
       const status = await AudioModule.getRecordingPermissionsAsync();
       if (!status.granted) {
         const req = await AudioModule.requestRecordingPermissionsAsync();
         if (!req.granted) {
-          Alert.alert('Permission Required', 'Microphone access is needed for voice input.');
+          toast.error('Permission required', 'Microphone access is needed for voice input.');
           return;
         }
       }
       await audioRecorder.prepareToRecordAsync();
       audioRecorder.record();
-    } catch (err) {
-      Alert.alert('Error', 'Could not start recording. Please try again.');
+      isRecordingRef.current = true;
+      setIsRecordingUi(true);
+    } catch {
+      isRecordingRef.current = false;
+      setIsRecordingUi(false);
+      toast.error('Error', 'Could not start recording. Please try again.');
+    } finally {
+      voiceBusyRef.current = false;
     }
   };
 
   const stopRecording = async () => {
-    if (!recorderState.isRecording) return;
+    if (!isRecordingRef.current && !recorderState.isRecording) return;
+    if (voiceBusyRef.current) return;
+
+    voiceBusyRef.current = true;
+    isRecordingRef.current = false;
+    setIsRecordingUi(false);
     setIsTranscribing(true);
 
     try {
       await audioRecorder.stop();
       const uri = audioRecorder.uri;
-
       if (!uri) {
         setIsTranscribing(false);
         return;
@@ -288,20 +354,31 @@ export default function ModernAdvisorScreen() {
           if (result.success && result.text) {
             setInput(result.text);
           } else {
-            Alert.alert('Transcription Failed', result.error || 'Could not transcribe audio. Please type your message instead.');
+            toast.error('Transcription failed', result.error || 'Could not transcribe audio.');
           }
         } catch {
-          Alert.alert('Error', 'Voice transcription failed. Please type your message.');
+          toast.error('Error', 'Voice transcription failed. Please type your message.');
         } finally {
           setIsTranscribing(false);
+          voiceBusyRef.current = false;
         }
       };
 
       reader.readAsDataURL(blob);
     } catch {
       setIsTranscribing(false);
-      Alert.alert('Error', 'Could not process recording.');
+      voiceBusyRef.current = false;
+      toast.error('Error', 'Could not process recording.');
     }
+  };
+
+  /** Tap once to start, tap again to stop — avoids press-and-hold race toasts. */
+  const toggleRecording = () => {
+    if (isRecordingRef.current || recorderState.isRecording) {
+      void stopRecording();
+      return;
+    }
+    void startRecording();
   };
 
   const sendMessage = (text: string) => {
@@ -346,134 +423,223 @@ export default function ModernAdvisorScreen() {
       });
   };
 
-  const handleSuggestionPress = (suggestion: string) => {
-    setActiveSuggestion(suggestion);
-    sendMessage(suggestion);
-  };
+  useEffect(() => {
+    if (!activeScan || !scanIdParam) return;
+    if (handledScanIdRef.current === scanIdParam) return;
+    if (!historyLoaded) return;
+
+    handledScanIdRef.current = scanIdParam;
+
+    const disease = activeScan.diseaseName || activeScan.analysis?.disease?.name;
+    const condition = activeScan.conditionLabel || activeScan.condition;
+    const summary = activeScan.summary || activeScan.analysis?.summary || 'No summary available';
+    const fieldPart = activeScan.fieldName
+      ? ` for ${activeScan.fieldName}${activeScan.fieldCrop ? ` (${activeScan.fieldCrop})` : ''}`
+      : '';
+
+    const prompt = [
+      `I just scanned my crop${fieldPart}.`,
+      `Result: ${condition}${disease ? ` — ${disease}` : ''}.`,
+      `Scanner summary: ${summary}`,
+      'Please explain what this means and what I should do next on my farm.',
+    ].join(' ');
+
+    sendMessage(prompt);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- once per scanId after history loads
+  }, [activeScan, scanIdParam, historyLoaded]);
 
   return (
-    <Screen>
-      {/* Compact App Header */}
-      <AppHeader variant="default">
-        <Surface variant="transparent" style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-          <Surface variant="transparent" style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+    <Screen style={{ paddingTop: insets.top }}>
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 8 : 0}
+      >
+        <AppHeader variant="default">
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
             <Ionicons name="leaf" size={18} color={theme.colors.primary} />
             <Text variant="body" style={{ fontWeight: '700' }}>
               {t('aiAdvisor')}
             </Text>
+          </View>
+        </AppHeader>
+
+        <SystemMessageCard variant="muted">
+          <Ionicons name="sunny-outline" size={16} color={theme.colors.primary} />
+          <Surface variant="transparent" style={{ flex: 1 }}>
+            <Text variant="caption" style={{ fontWeight: '600' }}>
+              {weatherSummary
+                ? `${weatherSummary.condition}, ${weatherSummary.high}°/${weatherSummary.low}°`
+                : 'Loading farm weather...'}
+            </Text>
           </Surface>
-          <TouchableOpacity>
-            <Ionicons name="settings-outline" size={20} color={theme.colors.textSecondary} />
-          </TouchableOpacity>
-        </Surface>
-      </AppHeader>
+        </SystemMessageCard>
 
-      {/* Compact Weather Context */}
-      <SystemMessageCard variant="muted">
-        <Ionicons name="sunny-outline" size={16} color={theme.colors.primary} />
-        <Surface variant="transparent" style={{ flex: 1 }}>
-          <Text variant="caption" style={{ fontWeight: '600' }}>
-            {weatherSummary ? `${weatherSummary.condition}, ${weatherSummary.high}°/${weatherSummary.low}°` : 'Loading weather...'}
-          </Text>
-        </Surface>
-      </SystemMessageCard>
+        {activeScan ? (
+          <View style={{ position: 'relative' }}>
+            <ScanContextCard
+              activeOpacity={0.85}
+              onPress={() =>
+                router.push({
+                  pathname: '/farm-scan',
+                  params: { scanId: activeScan.id },
+                })
+              }
+            >
+              <View style={{ flexDirection: 'row', gap: 12, padding: 12, paddingRight: 40, alignItems: 'center' }}>
+                <AuthenticatedImage
+                  uri={activeScan.imagePath}
+                  style={{ width: 72, height: 72, borderRadius: 14 }}
+                  contentFit="cover"
+                  fallback={
+                    <View
+                      style={{
+                        width: 72,
+                        height: 72,
+                        borderRadius: 14,
+                        backgroundColor: `${theme.colors.primary}18`,
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                      }}
+                    >
+                      <Ionicons name="scan" size={28} color={theme.colors.primary} />
+                    </View>
+                  }
+                />
+                <View style={{ flex: 1, gap: 4 }}>
+                  <Text variant="caption" style={{ fontWeight: '700', color: theme.colors.primary }}>
+                    Crop scan attached
+                  </Text>
+                  <Text variant="headline" numberOfLines={1}>
+                    {activeScan.diseaseName || activeScan.conditionLabel || activeScan.condition}
+                  </Text>
+                  <Text variant="caption" tone="muted" numberOfLines={2}>
+                    {activeScan.summary || 'Tap to reopen the full scan result'}
+                  </Text>
+                  <Text variant="caption" tone="muted">
+                    {activeScan.fieldName ? `${activeScan.fieldName} · ` : ''}
+                    {new Date(activeScan.date).toLocaleDateString()} · Tap to view
+                  </Text>
+                </View>
+              </View>
+            </ScanContextCard>
+            <TouchableOpacity
+              onPress={() => {
+                setActiveScan(null);
+                handledScanIdRef.current = scanIdParam;
+                router.setParams({ scanId: undefined });
+              }}
+              hitSlop={12}
+              style={{
+                position: 'absolute',
+                top: 18,
+                right: 28,
+                width: 28,
+                height: 28,
+                borderRadius: 14,
+                backgroundColor: theme.colors.surfaceAlt,
+                alignItems: 'center',
+                justifyContent: 'center',
+                zIndex: 2,
+              }}
+              accessibilityLabel="Remove attached scan"
+            >
+              <Ionicons name="close" size={16} color={theme.colors.textSecondary} />
+            </TouchableOpacity>
+          </View>
+        ) : null}
 
-      {/* Chat Messages List */}
-      <MessageList>
-        {messages.map((message) => (
-          <ChatBubbleWrapper key={message.id} fromAgent={message.fromAgent}>
-            <Avatar fromAgent={message.fromAgent}>
-              {message.fromAgent ? (
-                <Ionicons name="leaf" size={16} color="#FFF" />
-              ) : (
-                <Ionicons name="person" size={16} color="#FFF" />
-              )}
-            </Avatar>
-            <BubbleContent fromAgent={message.fromAgent}>
-              <Text variant="body" style={message.fromAgent ? { color: theme.colors.textPrimary } : { color: '#ffffff' }}>
-                {message.text}
-              </Text>
-              {message.timestamp && (
-                <Text
-                  variant="caption"
-                  tone="muted"
-                  style={{
-                    textAlign: 'right',
-                    marginTop: 4,
-                    fontSize: 10,
-                    color: message.fromAgent ? theme.colors.textSecondary : 'rgba(255,255,255,0.7)',
-                  }}
-                >
-                  {message.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                </Text>
-              )}
-            </BubbleContent>
-          </ChatBubbleWrapper>
-        ))}
-        <TypingIndicator isVisible={isAgentTyping} />
-      </MessageList>
+        <MessageList ref={listRef}>
+          {messages.map((message) => (
+            <ChatBubbleWrapper key={message.id} fromAgent={message.fromAgent}>
+              <Avatar fromAgent={message.fromAgent}>
+                <Ionicons name={message.fromAgent ? 'leaf' : 'person'} size={16} color="#FFF" />
+              </Avatar>
+              <BubbleContent fromAgent={message.fromAgent}>
+                <FormattedMessage
+                  text={message.text}
+                  style={message.fromAgent ? { color: theme.colors.textPrimary } : { color: '#ffffff' }}
+                />
+                {message.timestamp ? (
+                  <Text
+                    variant="caption"
+                    tone="muted"
+                    style={{
+                      textAlign: 'right',
+                      marginTop: 4,
+                      fontSize: 10,
+                      color: message.fromAgent ? theme.colors.textSecondary : 'rgba(255,255,255,0.7)',
+                    }}
+                  >
+                    {message.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                  </Text>
+                ) : null}
+              </BubbleContent>
+            </ChatBubbleWrapper>
+          ))}
+          <TypingIndicator isVisible={isAgentTyping} />
+        </MessageList>
 
-      {/* Compact Quick Suggestions - horizontal scroll */}
-      {!isAgentTyping && messages.length <= 4 && (
-        <Surface variant="transparent" style={{ paddingVertical: 6, paddingLeft: 16 }}>
-          <Text variant="caption" tone="muted" style={{ marginBottom: 6, fontWeight: '600' }}>
-            {t('tryAsking')}
-          </Text>
-          <Surface variant="transparent" style={{ flexDirection: 'row', gap: 8, flexWrap: 'wrap' }}>
-            <Chip
-              label={t('scanMyCrops')}
-              tone="success"
-              icon={<Ionicons name="scan" size={14} color={theme.colors.success} />}
-              onPress={() => router.push('/farm-scan')}
-            />
-            {suggestions.slice(0, 3).map((suggestion) => (
+        {!hasUserMessages && !isAgentTyping ? (
+          <Surface variant="transparent" style={{ paddingVertical: 6, paddingHorizontal: 16 }}>
+            <Text variant="caption" tone="muted" style={{ marginBottom: 6, fontWeight: '600' }}>
+              {t('tryAsking')}
+            </Text>
+            <Surface variant="transparent" style={{ flexDirection: 'row', gap: 8, flexWrap: 'wrap' }}>
               <Chip
-                key={suggestion}
-                label={suggestion.length > 30 ? suggestion.substring(0, 30) + '...' : suggestion}
-                tone={activeSuggestion === suggestion ? 'success' : 'default'}
-                onPress={() => handleSuggestionPress(suggestion)}
+                label={t('scanMyCrops')}
+                tone="success"
+                icon={<Ionicons name="scan" size={14} color={theme.colors.success} />}
+                onPress={() => router.push('/farm-scan')}
               />
-            ))}
+              {suggestions.slice(0, 3).map((suggestion) => (
+                <Chip
+                  key={suggestion}
+                  label={suggestion.length > 30 ? `${suggestion.substring(0, 30)}...` : suggestion}
+                  tone={activeSuggestion === suggestion ? 'success' : 'default'}
+                  onPress={() => {
+                    setActiveSuggestion(suggestion);
+                    sendMessage(suggestion);
+                  }}
+                />
+              ))}
+            </Surface>
           </Surface>
-        </Surface>
-      )}
+        ) : null}
 
-      {/* Modern Input Toolbar */}
-      <InputToolbar>
-        <AttachmentButton onPress={() => router.push('/farm-scan')}>
-          <Ionicons name="scan" size={20} color={theme.colors.accent} />
-        </AttachmentButton>
-        <ChatInput
-          placeholder={t('askPlaceholder')}
-          placeholderTextColor="#9ba3ab"
-          value={input}
-          onChangeText={setInput}
-          returnKeyType="send"
-          onSubmitEditing={() => sendMessage(input)}
-          blurOnSubmit={false}
-          editable={!isTranscribing}
-        />
-        {isTranscribing ? (
-          <Surface variant="transparent" style={{ marginLeft: 12, padding: 12, alignItems: 'center' }}>
-            <Ionicons name="hourglass-outline" size={22} color={theme.colors.accent} />
-          </Surface>
-        ) : input.trim() ? (
-          <TouchableOpacity
-            style={{ marginLeft: 12, padding: 12 }}
-            onPress={() => sendMessage(input)}
-          >
-            <Ionicons name="send" size={24} color={theme.colors.primary} />
-          </TouchableOpacity>
-        ) : (
-          <VoiceButton
-            onPressIn={startRecording}
-            onPressOut={stopRecording}
-            style={recorderState.isRecording ? { backgroundColor: theme.colors.danger } : undefined}
-          >
-            <Ionicons name={recorderState.isRecording ? 'mic' : 'mic-outline'} size={22} color="#FFF" />
-          </VoiceButton>
-        )}
-      </InputToolbar>
+        <InputToolbar style={{ paddingBottom: Math.max(insets.bottom, 12) }}>
+          <AttachmentButton onPress={() => router.push('/farm-scan')}>
+            <Ionicons name="scan" size={20} color={theme.colors.accent} />
+          </AttachmentButton>
+          <ChatInput
+            placeholder={t('askPlaceholder')}
+            placeholderTextColor="#9ba3ab"
+            value={input}
+            onChangeText={setInput}
+            returnKeyType="send"
+            onSubmitEditing={() => sendMessage(input)}
+            blurOnSubmit={false}
+            editable={!isTranscribing}
+            multiline
+          />
+          {isTranscribing ? (
+            <View style={{ marginLeft: 12, padding: 12 }}>
+              <Ionicons name="hourglass-outline" size={22} color={theme.colors.accent} />
+            </View>
+          ) : input.trim() ? (
+            <TouchableOpacity style={{ marginLeft: 12, padding: 12 }} onPress={() => sendMessage(input)}>
+              <Ionicons name="send" size={24} color={theme.colors.primary} />
+            </TouchableOpacity>
+          ) : (
+            <VoiceButton
+              onPress={toggleRecording}
+              style={isRecordingUi ? { backgroundColor: theme.colors.danger } : undefined}
+            >
+              <Ionicons name={isRecordingUi ? 'mic' : 'mic-outline'} size={22} color="#FFF" />
+            </VoiceButton>
+          )}
+        </InputToolbar>
+      </KeyboardAvoidingView>
     </Screen>
   );
 }

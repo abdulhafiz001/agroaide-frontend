@@ -18,5 +18,11 @@ export interface FarmerProfile {
   avatarColor: string;
   preferredTheme: 'light' | 'dark' | 'field';
   preferredLanguage: SupportedLanguage;
+  notificationPreferences?: {
+    severeWeather: boolean;
+    marketMovers: boolean;
+    aiInsights: boolean;
+    communityMentions: boolean;
+  };
 }
 

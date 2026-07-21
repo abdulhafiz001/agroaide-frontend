@@ -10,6 +10,7 @@ import { Button, Surface, Text } from '@/design-system/components';
 import styled from '@/design-system/styled';
 import { notificationApi, type AppNotification } from '@/services/notificationApi';
 import { useAppStore } from '@/store/useAppStore';
+import { routeForNotification } from '@/utils/notificationRouting';
 
 const Screen = styled(SafeAreaView)`
   flex: 1;
@@ -42,8 +43,9 @@ const IconCircle = styled.View<{ type: string }>`
   justify-content: center;
   background-color: ${({ theme, type }) => {
     if (type === 'weather') return '#e0f2ff';
-    if (type === 'ai') return '#e9d5ff';
+    if (type === 'ai' || type === 'ai_insight') return '#e9d5ff';
     if (type === 'market') return '#d1fae5';
+    if (type === 'disease_outbreak' || type === 'disease_warning' || type === 'scan_result') return '#ffedd5';
     return '#f3f4f6';
   }};
 `;
@@ -51,8 +53,13 @@ const IconCircle = styled.View<{ type: string }>`
 const typeIcons: Record<string, { name: string; color: string }> = {
   weather: { name: 'cloud-outline', color: '#1d4ed8' },
   ai: { name: 'sparkles-outline', color: '#7c3aed' },
+  ai_insight: { name: 'sparkles-outline', color: '#7c3aed' },
   market: { name: 'trending-up-outline', color: '#047857' },
   system: { name: 'notifications-outline', color: '#374151' },
+  task_reminder: { name: 'calendar-outline', color: '#374151' },
+  disease_outbreak: { name: 'warning-outline', color: '#b45309' },
+  disease_warning: { name: 'alert-circle-outline', color: '#b45309' },
+  scan_result: { name: 'scan-outline', color: '#b45309' },
 };
 
 const EmptyState = styled.View`
@@ -114,6 +121,15 @@ export default function NotificationsScreen() {
         unread={!item.read}
         onPress={() => {
           if (!item.read) markReadMutation.mutate(item.id);
+          const route = routeForNotification(item.type, item.data, {
+            title: item.title,
+            message: item.message,
+          });
+          if (route.params && Object.keys(route.params).length > 0) {
+            router.push({ pathname: route.pathname, params: route.params } as any);
+          } else {
+            router.push(route.pathname as any);
+          }
         }}
       >
         <IconCircle type={item.type}>

@@ -78,7 +78,13 @@ export const useAppStore = create<AppState>()(
         });
       },
       setAuthState: ({ status, token }) => set({ authStatus: status, accessToken: token }),
-      setFarmerProfile: (profile) => set({ farmerProfile: profile }),
+      setFarmerProfile: (profile) =>
+        set((state) => ({
+          farmerProfile: profile,
+          notificationPreferences: profile.notificationPreferences
+            ? { ...state.notificationPreferences, ...profile.notificationPreferences }
+            : state.notificationPreferences,
+        })),
       updateFarmerProfile: (profile) =>
         set((state) => ({
           farmerProfile: state.farmerProfile ? { ...state.farmerProfile, ...profile } : state.farmerProfile,
@@ -97,6 +103,7 @@ export const useAppStore = create<AppState>()(
         set({
           authStatus: 'signedOut',
           accessToken: undefined,
+          farmerProfile: undefined,
         }),
       markHydrated: () => set({ hydrated: true }),
     }),

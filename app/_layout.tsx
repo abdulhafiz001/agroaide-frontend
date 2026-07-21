@@ -25,6 +25,7 @@ export default function RootLayout() {
         <Stack.Screen name="auth/register" />
         <Stack.Screen name="auth/recovery" />
         <Stack.Screen name="auth/profile" />
+        <Stack.Screen name="auth/complete-farm" />
         <Stack.Screen name="(app)" />
       </Stack>
     </AppProviders>

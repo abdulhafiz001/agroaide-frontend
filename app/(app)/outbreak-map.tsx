@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useQuery } from '@tanstack/react-query';
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import React from 'react';
 import { ActivityIndicator, ScrollView, TouchableOpacity, View } from 'react-native';
 import MapView, { Circle, Marker } from 'react-native-maps';
@@ -51,8 +51,17 @@ export default function OutbreakMapScreen() {
   const theme = useTheme();
   const router = useRouter();
   const { t } = useTranslation();
+  const params = useLocalSearchParams<{
+    title?: string;
+    message?: string;
+    disease?: string;
+    crop?: string;
+    level?: string;
+  }>();
   const token = useAppStore((s) => s.accessToken) ?? '';
   const profile = useAppStore((s) => s.farmerProfile);
+  const pushTitle = params.title ? String(params.title) : null;
+  const pushMessage = params.message ? String(params.message) : null;
 
   const { data, isLoading } = useQuery({
     queryKey: ['outbreakHeatmap'],
@@ -87,6 +96,34 @@ export default function OutbreakMapScreen() {
       </Header>
 
       <Container>
+        {pushTitle || pushMessage ? (
+          <Surface
+            rounded="xl"
+            style={{
+              gap: 8,
+              marginBottom: 16,
+              borderLeftWidth: 4,
+              borderLeftColor: theme.colors.danger,
+              backgroundColor: `${theme.colors.danger}10`,
+            }}
+          >
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+              <Ionicons name="notifications" size={18} color={theme.colors.danger} />
+              <Text variant="headline" style={{ flex: 1 }}>
+                {pushTitle || 'Disease alert'}
+              </Text>
+              {params.level ? <Chip label={String(params.level)} tone="danger" /> : null}
+            </View>
+            {pushMessage ? <Text variant="body">{pushMessage}</Text> : null}
+            {(params.disease || params.crop) && (
+              <View style={{ flexDirection: 'row', gap: 8, flexWrap: 'wrap' }}>
+                {params.disease ? <Chip label={String(params.disease)} tone="warning" /> : null}
+                {params.crop ? <Chip label={String(params.crop)} tone="info" /> : null}
+              </View>
+            )}
+          </Surface>
+        ) : null}
+
         <View style={{ height: 300, borderRadius: 20, overflow: 'hidden', marginBottom: 16 }}>
           {isLoading ? (
             <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: theme.colors.surfaceAlt }}>
