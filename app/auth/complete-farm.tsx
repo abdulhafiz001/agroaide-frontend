@@ -16,6 +16,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from 'styled-components/native';
 
 import { LocationMapPreview } from '@/components/LocationMapPreview';
+import type { LeafletMapHandle } from '@/components/LeafletMap';
 import { useToast } from '@/components/Toast';
 import { Button, Chip, InputField, Surface, Text } from '@/design-system/components';
 import styled from '@/design-system/styled';
@@ -92,7 +93,7 @@ export default function CompleteFarmScreen() {
 
   const [step, setStep] = useState(1);
   const fadeAnim = useRef(new Animated.Value(1)).current;
-  const mapRef = useRef<any>(null);
+  const mapRef = useRef<LeafletMapHandle | null>(null);
   const searchTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const [farmName, setFarmName] = useState(profile?.farmName && profile.farmName !== 'My Farm' ? profile.farmName : '');

@@ -1,15 +1,15 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useQuery } from '@tanstack/react-query';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import React from 'react';
+import React, { useMemo } from 'react';
 import { ActivityIndicator, ScrollView, TouchableOpacity, View } from 'react-native';
-import MapView, { Circle, Marker } from 'react-native-maps';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme } from 'styled-components/native';
 
+import { LeafletMap } from '@/components/LeafletMap';
 import { Chip, Surface, Text } from '@/design-system/components';
 import styled from '@/design-system/styled';
-import { outbreakApi, type HeatmapPoint } from '@/services/outbreakApi';
+import { outbreakApi } from '@/services/outbreakApi';
 import { useAppStore } from '@/store/useAppStore';
 import { useTranslation } from '@/i18n/useTranslation';
 
@@ -83,6 +83,43 @@ export default function OutbreakMapScreen() {
 
   const diseases = [...new Set(points.map((p) => p.disease))];
 
+  const outbreakMarkers = useMemo(() => {
+    const markers = points.map((point, index) => ({
+      id: `p-${index}`,
+      latitude: point.latitude,
+      longitude: point.longitude,
+      title: point.disease,
+      description: `${point.count} report(s)`,
+      color: getDiseaseColor(point.disease),
+    }));
+
+    if (profile?.farmLatitude && profile?.farmLongitude) {
+      markers.unshift({
+        id: 'farm',
+        latitude: profile.farmLatitude,
+        longitude: profile.farmLongitude,
+        title: 'Your Farm',
+        description: '',
+        color: theme.colors.primary,
+      });
+    }
+
+    return markers;
+  }, [points, profile?.farmLatitude, profile?.farmLongitude, theme.colors.primary]);
+
+  const outbreakCircles = useMemo(
+    () =>
+      points.map((point, index) => ({
+        id: `c-${index}`,
+        latitude: point.latitude,
+        longitude: point.longitude,
+        radiusMeters: 2000,
+        color: getDiseaseColor(point.disease),
+        fillOpacity: 0.2,
+      })),
+    [points],
+  );
+
   return (
     <Screen>
       <Header>
@@ -130,40 +167,13 @@ export default function OutbreakMapScreen() {
               <ActivityIndicator size="large" color={theme.colors.primary} />
             </View>
           ) : (
-            <MapView
-              style={{ flex: 1 }}
-              initialRegion={{
-                latitude: farmLat,
-                longitude: farmLng,
-                latitudeDelta: 0.5,
-                longitudeDelta: 0.5,
-              }}
-            >
-              {profile?.farmLatitude && profile?.farmLongitude && (
-                <Marker
-                  coordinate={{ latitude: profile.farmLatitude, longitude: profile.farmLongitude }}
-                  title="Your Farm"
-                  pinColor={theme.colors.primary}
-                />
-              )}
-              {points.map((point, index) => (
-                <React.Fragment key={`${point.latitude}-${point.longitude}-${index}`}>
-                  <Circle
-                    center={{ latitude: point.latitude, longitude: point.longitude }}
-                    radius={2000}
-                    fillColor={`${getDiseaseColor(point.disease)}30`}
-                    strokeColor={getDiseaseColor(point.disease)}
-                    strokeWidth={1}
-                  />
-                  <Marker
-                    coordinate={{ latitude: point.latitude, longitude: point.longitude }}
-                    title={point.disease}
-                    description={`${point.count} report(s)`}
-                    pinColor={getDiseaseColor(point.disease)}
-                  />
-                </React.Fragment>
-              ))}
-            </MapView>
+            <LeafletMap
+              center={{ latitude: farmLat, longitude: farmLng }}
+              zoom={10}
+              scrollEnabled
+              markers={outbreakMarkers}
+              circles={outbreakCircles}
+            />
           )}
         </View>
 

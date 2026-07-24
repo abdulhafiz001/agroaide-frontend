@@ -1,43 +1,30 @@
 import React, { forwardRef } from 'react';
-import { View } from 'react-native';
-import { useTheme } from 'styled-components/native';
+import { StyleProp, ViewStyle } from 'react-native';
+
+import { LeafletMap, type LeafletMapHandle } from '@/components/LeafletMap';
 
 type LocationMapPreviewProps = {
   latitude: number;
   longitude: number;
-  style?: { flex?: number };
+  style?: StyleProp<ViewStyle>;
 };
 
-export const LocationMapPreview = forwardRef<unknown, LocationMapPreviewProps>(
-  ({ latitude, longitude, style }, _ref) => {
-    const theme = useTheme();
-    return (
-      <View
-        style={[
-          { flex: 1, borderRadius: 16, overflow: 'hidden', backgroundColor: theme.colors.surfaceAlt },
-          style,
-        ]}
-      >
-        <View
-          style={{
-            flex: 1,
-            alignItems: 'center',
-            justifyContent: 'center',
-            padding: 24,
-          }}
-        >
-          <View
-            style={{
-              width: 48,
-              height: 48,
-              borderRadius: 24,
-              backgroundColor: theme.colors.primary + '33',
-              alignItems: 'center',
-              justifyContent: 'center',
-            }}
-          />
-        </View>
-      </View>
-    );
-  },
+export const LocationMapPreview = forwardRef<LeafletMapHandle, LocationMapPreviewProps>(
+  ({ latitude, longitude, style }, ref) => (
+    <LeafletMap
+      ref={ref}
+      style={style}
+      center={{ latitude, longitude }}
+      zoom={15}
+      scrollEnabled
+      markers={[
+        {
+          latitude,
+          longitude,
+          title: 'Farm location',
+          color: '#57b346',
+        },
+      ]}
+    />
+  ),
 );

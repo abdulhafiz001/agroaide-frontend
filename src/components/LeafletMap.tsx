@@ -1,0 +1,228 @@
+import React, { forwardRef, useImperativeHandle, useMemo, useRef } from 'react';
+import { StyleProp, ViewStyle } from 'react-native';
+import { WebView } from 'react-native-webview';
+
+export type LeafletMarker = {
+  id?: string;
+  latitude: number;
+  longitude: number;
+  title?: string;
+  description?: string;
+  color?: string;
+};
+
+export type LeafletCircle = {
+  id?: string;
+  latitude: number;
+  longitude: number;
+  radiusMeters: number;
+  color?: string;
+  fillOpacity?: number;
+};
+
+export type LeafletPolygon = {
+  coordinates: { latitude: number; longitude: number }[];
+  color?: string;
+  fillOpacity?: number;
+};
+
+export type LeafletMapHandle = {
+  animateToRegion: (
+    region: { latitude: number; longitude: number; latitudeDelta?: number; longitudeDelta?: number },
+    _duration?: number,
+  ) => void;
+};
+
+type LeafletMapProps = {
+  center: { latitude: number; longitude: number };
+  zoom?: number;
+  markers?: LeafletMarker[];
+  circles?: LeafletCircle[];
+  polygons?: LeafletPolygon[];
+  scrollEnabled?: boolean;
+  style?: StyleProp<ViewStyle>;
+};
+
+function buildHtml({
+  center,
+  zoom,
+  markers,
+  circles,
+  polygons,
+  scrollEnabled,
+}: Required<
+  Pick<LeafletMapProps, 'center' | 'zoom' | 'markers' | 'circles' | 'polygons' | 'scrollEnabled'>
+>): string {
+  const markersJson = JSON.stringify(
+    markers.map((m) => ({
+      lat: m.latitude,
+      lng: m.longitude,
+      title: m.title ?? '',
+      description: m.description ?? '',
+      color: m.color ?? '#57b346',
+    })),
+  );
+  const circlesJson = JSON.stringify(
+    circles.map((c) => ({
+      lat: c.latitude,
+      lng: c.longitude,
+      radius: c.radiusMeters,
+      color: c.color ?? '#e63946',
+      fillOpacity: c.fillOpacity ?? 0.2,
+    })),
+  );
+  const polygonsJson = JSON.stringify(
+    polygons.map((p) => ({
+      coords: p.coordinates.map((c) => [c.latitude, c.longitude]),
+      color: p.color ?? '#57b346',
+      fillOpacity: p.fillOpacity ?? 0.2,
+    })),
+  );
+
+  return `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <style>
+    html, body, #map { margin: 0; padding: 0; height: 100%; width: 100%; background: #e8f5e9; }
+    .leaflet-control-attribution { font-size: 10px; }
+  </style>
+</head>
+<body>
+  <div id="map"></div>
+  <script>
+    var scrollEnabled = ${scrollEnabled ? 'true' : 'false'};
+    var map = L.map('map', {
+      zoomControl: scrollEnabled,
+      dragging: scrollEnabled,
+      scrollWheelZoom: scrollEnabled,
+      doubleClickZoom: scrollEnabled,
+      boxZoom: scrollEnabled,
+      keyboard: scrollEnabled
+    }).setView([${center.latitude}, ${center.longitude}], ${zoom});
+
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom: 19,
+      attribution: '&copy; OpenStreetMap'
+    }).addTo(map);
+
+    function markerIcon(color) {
+      return L.divIcon({
+        className: '',
+        html: '<div style="width:18px;height:18px;border-radius:50%;background:' + color + ';border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.35);"></div>',
+        iconSize: [18, 18],
+        iconAnchor: [9, 9]
+      });
+    }
+
+    var markers = ${markersJson};
+    markers.forEach(function (m) {
+      var marker = L.marker([m.lat, m.lng], { icon: markerIcon(m.color) }).addTo(map);
+      var html = '';
+      if (m.title) html += '<strong>' + m.title + '</strong>';
+      if (m.description) html += (html ? '<br/>' : '') + m.description;
+      if (html) marker.bindPopup(html);
+    });
+
+    var circles = ${circlesJson};
+    circles.forEach(function (c) {
+      L.circle([c.lat, c.lng], {
+        radius: c.radius,
+        color: c.color,
+        fillColor: c.color,
+        fillOpacity: c.fillOpacity,
+        weight: 1
+      }).addTo(map);
+    });
+
+    var polygons = ${polygonsJson};
+    polygons.forEach(function (p) {
+      L.polygon(p.coords, {
+        color: p.color,
+        fillColor: p.color,
+        fillOpacity: p.fillOpacity,
+        weight: 2
+      }).addTo(map);
+    });
+
+    setTimeout(function () { map.invalidateSize(); }, 120);
+
+    function animateTo(lat, lng, zoomLevel) {
+      map.flyTo([lat, lng], zoomLevel || map.getZoom(), { duration: 0.6 });
+    }
+
+    document.addEventListener('message', function (event) {
+      try {
+        var data = JSON.parse(event.data);
+        if (data.type === 'animateTo') animateTo(data.lat, data.lng, data.zoom);
+      } catch (e) {}
+    });
+    window.addEventListener('message', function (event) {
+      try {
+        var data = typeof event.data === 'string' ? JSON.parse(event.data) : event.data;
+        if (data.type === 'animateTo') animateTo(data.lat, data.lng, data.zoom);
+      } catch (e) {}
+    });
+  </script>
+</body>
+</html>`;
+}
+
+export const LeafletMap = forwardRef<LeafletMapHandle, LeafletMapProps>(function LeafletMap(
+  {
+    center,
+    zoom = 14,
+    markers = [],
+    circles = [],
+    polygons = [],
+    scrollEnabled = true,
+    style,
+  },
+  ref,
+) {
+  const webRef = useRef<WebView>(null);
+
+  const html = useMemo(
+    () =>
+      buildHtml({
+        center,
+        zoom,
+        markers,
+        circles,
+        polygons,
+        scrollEnabled,
+      }),
+    // Intentionally rebuild when geometry changes
+    [center.latitude, center.longitude, zoom, JSON.stringify(markers), JSON.stringify(circles), JSON.stringify(polygons), scrollEnabled],
+  );
+
+  useImperativeHandle(ref, () => ({
+    animateToRegion: (region) => {
+      const nextZoom =
+        region.latitudeDelta && region.latitudeDelta > 0
+          ? Math.max(3, Math.min(18, Math.round(Math.log2(360 / region.latitudeDelta))))
+          : zoom;
+      webRef.current?.injectJavaScript(
+        `animateTo(${region.latitude}, ${region.longitude}, ${nextZoom}); true;`,
+      );
+    },
+  }));
+
+  return (
+    <WebView
+      ref={webRef}
+      originWhitelist={['*']}
+      source={{ html }}
+      style={[{ flex: 1, backgroundColor: '#e8f5e9' }, style]}
+      scrollEnabled={false}
+      javaScriptEnabled
+      domStorageEnabled
+      mixedContentMode="always"
+      setSupportMultipleWindows={false}
+      androidLayerType="hardware"
+    />
+  );
+});

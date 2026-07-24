@@ -15,6 +15,8 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { LocationMapPreview } from '@/components/LocationMapPreview';
+import type { LeafletMapHandle } from '@/components/LeafletMap';
+import type { LeafletMapHandle } from '@/components/LeafletMap';
 import styled from '@/design-system/styled';
 import { useTheme } from 'styled-components/native';
 
@@ -137,7 +139,7 @@ export default function RegisterScreen() {
   const [searching, setSearching] = useState(false);
   const [gettingGPS, setGettingGPS] = useState(false);
   const searchTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const mapRef = useRef<unknown>(null);
+  const mapRef = useRef<LeafletMapHandle | null>(null);
 
   const fadeAnim = useRef(new Animated.Value(1)).current;
 

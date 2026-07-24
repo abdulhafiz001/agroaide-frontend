@@ -1,5 +1,3 @@
-const googleMapsApiKey = process.env.GOOGLE_MAPS_API_KEY ?? process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY ?? '';
-
 /** @type {import('expo/config').ExpoConfig} */
 const config = {
   name: 'AgroAide',
@@ -13,11 +11,6 @@ const config = {
   ios: {
     supportsTablet: true,
     bundleIdentifier: 'com.ahz.agroaide',
-    config: googleMapsApiKey
-      ? {
-          googleMapsApiKey,
-        }
-      : undefined,
   },
   android: {
     package: 'com.ahz.agroaide',
@@ -36,13 +29,6 @@ const config = {
       'android.permission.ACCESS_COARSE_LOCATION',
       'android.permission.ACCESS_FINE_LOCATION',
     ],
-    config: googleMapsApiKey
-      ? {
-          googleMaps: {
-            apiKey: googleMapsApiKey,
-          },
-        }
-      : undefined,
   },
   web: {
     output: 'static',
@@ -89,7 +75,6 @@ const config = {
     eas: {
       projectId: 'fd9daaf2-bb7c-4abd-abd3-b4eb92917755',
     },
-    googleMapsApiKey,
   },
 };
 
