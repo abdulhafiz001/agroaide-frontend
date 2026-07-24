@@ -15,6 +15,8 @@ export type FarmField = {
   daysSincePlanting: number | null;
   status: string;
   plantedAt: string | null;
+  boundaryGeojson?: GeoJSON.Polygon | null;
+  hasMeasuredBoundary?: boolean;
 };
 
 export type JournalEntry = {
@@ -31,20 +33,61 @@ export type FarmOverviewResponse = {
   map: {
     center: MapCoordinate;
     polygon: MapCoordinate[];
-  };
+    fields?: Array<{
+      fieldId: string;
+      name: string;
+      polygon: MapCoordinate[];
+      geojson?: GeoJSON.Polygon;
+    }>;
+  } | null;
   farmSummary: {
     farmName: string;
     farmLocation: string;
-    farmSizeHectares: number;
+    farmSizeM2: number;
   };
 };
+
+export type FieldTransaction = {
+  id: string;
+  farmFieldId: string;
+  type: 'EXPENSE' | 'INCOME';
+  category: 'SEED' | 'FERTILIZER' | 'LABOR' | 'HARVEST_SALE' | 'OTHER';
+  amount: number;
+  quantity: number | null;
+  unit: string | null;
+  occurredOn: string;
+  note: string | null;
+  clientUuid?: string | null;
+};
+
+export type FieldEconomics = {
+  fieldId: string;
+  crop: string;
+  areaM2: number;
+  totals: {
+    expense: number;
+    income: number;
+    netProfit: number;
+  };
+  costPerM2: number | null;
+  netProfitPerM2: number | null;
+  byCategory: Array<{ category: string; expense: number; income: number; net: number }>;
+};
+
+declare namespace GeoJSON {
+  type Position = [number, number] | [number, number, number];
+  interface Polygon {
+    type: 'Polygon';
+    coordinates: Position[][];
+  }
+}
 
 export const farmApi = {
   getOverview(token: string) {
     return apiRequest<FarmOverviewResponse>('/farm/overview', { token });
   },
 
-  addField(token: string, payload: { name: string; crop: string; areaHectares?: number; plantedAt?: string }) {
+  addField(token: string, payload: { name: string; crop: string; areaM2?: number; plantedAt?: string; clientUuid?: string }) {
     return apiRequest<{ field: FarmField }>('/farm/fields', {
       method: 'POST',
       token,
@@ -52,7 +95,7 @@ export const farmApi = {
     });
   },
 
-  updateField(token: string, fieldId: string, payload: Record<string, any>) {
+  updateField(token: string, fieldId: string, payload: Record<string, unknown>) {
     return apiRequest<{ message: string; field: FarmField }>(`/farm/fields/${fieldId}`, {
       method: 'PUT',
       token,
@@ -64,6 +107,18 @@ export const farmApi = {
     return apiRequest<{ message: string }>(`/farm/fields/${fieldId}`, {
       method: 'DELETE',
       token,
+    });
+  },
+
+  updateBoundary(
+    token: string,
+    fieldId: string,
+    payload: { geojson: GeoJSON.Polygon; areaM2: number; clientUuid?: string; clientTimestamp?: string },
+  ) {
+    return apiRequest<{ message: string; field: FarmField }>(`/farm/fields/${fieldId}/boundary`, {
+      method: 'PUT',
+      token,
+      body: payload,
     });
   },
 
@@ -88,5 +143,77 @@ export const farmApi = {
       method: 'DELETE',
       token,
     });
+  },
+
+  listTransactions(token: string, fieldId: string, params?: { from?: string; to?: string }) {
+    const query = new URLSearchParams();
+    if (params?.from) query.set('from', params.from);
+    if (params?.to) query.set('to', params.to);
+    const qs = query.toString();
+    return apiRequest<{ transactions: FieldTransaction[] }>(
+      `/farm/fields/${fieldId}/transactions${qs ? `?${qs}` : ''}`,
+      { token },
+    );
+  },
+
+  createTransaction(
+    token: string,
+    fieldId: string,
+    payload: {
+      type: FieldTransaction['type'];
+      category: FieldTransaction['category'];
+      amount: number;
+      quantity?: number;
+      unit?: string;
+      occurredOn: string;
+      note?: string;
+      clientUuid?: string;
+    },
+  ) {
+    return apiRequest<{ transaction: FieldTransaction }>(`/farm/fields/${fieldId}/transactions`, {
+      method: 'POST',
+      token,
+      body: payload,
+    });
+  },
+
+  updateTransaction(token: string, transactionId: string, payload: Record<string, unknown>) {
+    return apiRequest<{ transaction: FieldTransaction }>(`/transactions/${transactionId}`, {
+      method: 'PUT',
+      token,
+      body: payload,
+    });
+  },
+
+  deleteTransaction(token: string, transactionId: string) {
+    return apiRequest<{ message: string }>(`/transactions/${transactionId}`, {
+      method: 'DELETE',
+      token,
+    });
+  },
+
+  getFieldEconomics(token: string, fieldId: string) {
+    return apiRequest<FieldEconomics>(`/farm/fields/${fieldId}/economics`, { token });
+  },
+
+  getFarmEconomicsSummary(token: string) {
+    return apiRequest<{
+      byCrop: Array<{
+        crop: string;
+        expense: number;
+        income: number;
+        netProfit: number;
+        areaM2: number;
+        costPerM2: number | null;
+      }>;
+      totals: { expense: number; income: number; netProfit: number };
+    }>('/farm/economics/summary', { token });
+  },
+
+  exportEconomics(token: string, fieldId: string, format: 'csv' | 'pdf') {
+    return apiRequest<{ downloadUrl?: string; content?: string; filename: string; mimeType: string }>(
+      `/farm/fields/${fieldId}/economics/export?format=${format}`,
+      { token },
+    );
   },
 };

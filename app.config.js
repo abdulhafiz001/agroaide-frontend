@@ -1,3 +1,20 @@
+const fs = require('fs');
+const path = require('path');
+
+/** Prefer EAS file env (uploaded secret); fall back to local gitignored file. */
+function resolveGoogleServicesFile() {
+  if (process.env.GOOGLE_SERVICES_JSON) {
+    return process.env.GOOGLE_SERVICES_JSON;
+  }
+  const localPath = path.join(__dirname, 'google-services.json');
+  if (fs.existsSync(localPath)) {
+    return './google-services.json';
+  }
+  return undefined;
+}
+
+const googleServicesFile = resolveGoogleServicesFile();
+
 /** @type {import('expo/config').ExpoConfig} */
 const config = {
   name: 'AgroAide',
@@ -14,7 +31,7 @@ const config = {
   },
   android: {
     package: 'com.ahz.agroaide',
-    googleServicesFile: './google-services.json',
+    ...(googleServicesFile ? { googleServicesFile } : {}),
     adaptiveIcon: {
       backgroundColor: '#E6F4FE',
       foregroundImage: './assets/images/agroaideLogo.png',
@@ -50,6 +67,7 @@ const config = {
     ],
     'expo-audio',
     'expo-asset',
+    'expo-sqlite',
     [
       'expo-notifications',
       {

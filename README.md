@@ -1,50 +1,62 @@
-# Welcome to your Expo app 👋
+# AgroAide Mobile (Expo)
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+React Native / Expo app for Nigerian smallholder farmers: dashboard, farm fields, calendar, AI advisor, crop scanner, disease map, weather, and notifications.
 
-## Get started
+## Stack
 
-1. Install dependencies
+- Expo SDK 54, Expo Router, React Native
+- Zustand + TanStack Query
+- styled-components design system
+- i18n: English, Hausa, Yoruba, Nigerian Pidgin
 
-   ```bash
-   npm install
-   ```
-
-2. Start the app
-
-   ```bash
-   npx expo start
-   ```
-
-In the output, you'll find options to open the app in a
-
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
-
-You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
-
-## Get a fresh project
-
-When you're ready, run:
+## Quick start
 
 ```bash
-npm run reset-project
+pnpm install
+cp .env.example .env   # if present; otherwise create .env
+# set EXPO_PUBLIC_API_URL=http://YOUR_LAN_IP:8000/api
+pnpm start
 ```
 
-This command will move the starter code to the **app-example** directory and create a blank **app** directory where you can start developing.
+Use a **dev client** build for push notifications and native modules (`npx expo start --dev-client`).
 
-## Learn more
+## Environment variables
 
-To learn more about developing your project with Expo, look at the following resources:
+| Variable | Purpose |
+|----------|---------|
+| `EXPO_PUBLIC_API_URL` | Laravel API base, e.g. `http://10.0.2.2:8000/api` (Android emulator) or LAN IP for a physical phone |
+| `EXPO_PUBLIC_LOCATIONIQ_KEY` | Farm location autocomplete |
+| `GOOGLE_MAPS_API_KEY` | Native maps (Android/iOS) |
 
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
+**Secrets hygiene:** `.env` and `google-services.json` are gitignored. Do not commit Firebase or Maps keys.
 
-## Join the community
+## Architecture
 
-Join our community of developers creating universal apps.
+See [`../docs/ARCHITECTURE.md`](../docs/ARCHITECTURE.md) for system diagram and data-honesty notes.
 
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+## Tests
+
+```bash
+node --import tsx --test src/utils/notificationRouting.test.ts
+```
+
+(or `pnpm exec node --import tsx --test src/utils/notificationRouting.test.ts`)
+
+Covers notification deep-link routing used when farmers open weather / disease pushes.
+
+## Main screens
+
+| Route | Purpose |
+|-------|---------|
+| `(tabs)/dashboard` | Weather alert, tasks, soil proxies, forecast |
+| `(tabs)/farm` | Fields + journal |
+| `(tabs)/calendar` | Farm tasks |
+| `(tabs)/advisor` | Context-aware AI chat (+ voice) |
+| `farm-scan` | Crop photo diagnosis + history |
+| `outbreak-map` | Nearby disease clusters |
+| `weather-detail` | Forecast + alerts |
+| `notifications` | In-app inbox with deep links |
+
+## Evaluation write-up
+
+Template for your FYP evaluation chapter: [`../docs/EVALUATION.md`](../docs/EVALUATION.md).

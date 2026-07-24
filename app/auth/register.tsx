@@ -97,7 +97,7 @@ type RegistrationForm = {
   farmLocation: string;
   farmLatitude: number | null;
   farmLongitude: number | null;
-  farmSizeHectares: string;
+  farmSizeM2: string;
   soilType: string;
   irrigationAccess: string;
   crops: string;
@@ -114,7 +114,7 @@ const initialForm: RegistrationForm = {
   farmLocation: '',
   farmLatitude: null,
   farmLongitude: null,
-  farmSizeHectares: '',
+  farmSizeM2: '',
   soilType: '',
   irrigationAccess: 'drip',
   crops: '',
@@ -243,7 +243,7 @@ export default function RegisterScreen() {
       const irrigationAccess = irrigationOptions.includes(form.irrigationAccess as any)
         ? (form.irrigationAccess as (typeof irrigationOptions)[number])
         : 'drip';
-      const farmSizeParsed = form.farmSizeHectares ? Number(form.farmSizeHectares) : undefined;
+      const farmSizeParsed = form.farmSizeM2 ? Number(form.farmSizeM2) : undefined;
       const crops = form.crops
         ? form.crops.split(',').map((c) => c.trim()).filter(Boolean)
         : undefined;
@@ -258,7 +258,7 @@ export default function RegisterScreen() {
         ...(form.farmLocation ? { farmLocation: form.farmLocation } : {}),
         ...(form.farmLatitude != null ? { farmLatitude: form.farmLatitude } : {}),
         ...(form.farmLongitude != null ? { farmLongitude: form.farmLongitude } : {}),
-        ...(typeof farmSizeParsed === 'number' && !Number.isNaN(farmSizeParsed) ? { farmSizeHectares: farmSizeParsed } : {}),
+        ...(typeof farmSizeParsed === 'number' && !Number.isNaN(farmSizeParsed) ? { farmSizeM2: farmSizeParsed } : {}),
         ...(form.soilType ? { soilType: form.soilType } : {}),
         ...(crops?.length ? { crops } : {}),
         ...(form.experienceLevel ? { experienceLevel: form.experienceLevel } : {}),
@@ -350,9 +350,9 @@ export default function RegisterScreen() {
       </Text>
       <InputField label="Farm name" value={form.farmName} onChangeText={(t) => updateForm('farmName', t)} />
       <InputField
-        label="Farm size (hectares)"
-        value={form.farmSizeHectares}
-        onChangeText={(t) => updateForm('farmSizeHectares', t)}
+        label="Farm size (m²)"
+        value={form.farmSizeM2}
+        onChangeText={(t) => updateForm('farmSizeM2', t)}
         keyboardType="decimal-pad"
       />
       <InputField label="Soil type" value={form.soilType} onChangeText={(t) => updateForm('soilType', t)} placeholder="e.g. Loamy, Clay, Sandy" />

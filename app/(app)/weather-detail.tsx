@@ -298,6 +298,9 @@ export default function WeatherDetailScreen() {
         {soilHealth.length > 0 ? (
           <Surface rounded="xl" style={{ gap: 10 }}>
             <Text variant="headline">Soil & field conditions</Text>
+            <Text variant="caption" tone="muted">
+              Open-Meteo estimates at your farm coordinates (moisture/temp). Not laboratory NPK or pH results.
+            </Text>
             {soilHealth.map((item) => (
               <View
                 key={item.label}

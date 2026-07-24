@@ -121,13 +121,13 @@ export default function FarmScreen() {
   const invalidate = () => queryClient.invalidateQueries({ queryKey: ['farmOverview'] });
 
   const addFieldMutation = useMutation({
-    mutationFn: () => farmApi.addField(token, { name: fieldName, crop: fieldCrop, areaHectares: parseFloat(fieldArea) || 0 }),
+    mutationFn: () => farmApi.addField(token, { name: fieldName, crop: fieldCrop, areaM2: parseFloat(fieldArea) || 0 }),
     onSuccess: () => { invalidate(); closeFieldModal(); },
     onError: () => toast.error('Error', 'Could not add field.'),
   });
 
   const updateFieldMutation = useMutation({
-    mutationFn: () => farmApi.updateField(token, editingField!.id, { name: fieldName, crop: fieldCrop, areaHectares: parseFloat(fieldArea) || 0 }),
+    mutationFn: () => farmApi.updateField(token, editingField!.id, { name: fieldName, crop: fieldCrop, areaM2: parseFloat(fieldArea) || 0 }),
     onSuccess: () => { invalidate(); closeFieldModal(); },
     onError: () => toast.error('Error', 'Could not update field.'),
   });
@@ -217,7 +217,7 @@ export default function FarmScreen() {
       <Container>
         <View style={{ paddingTop: 16, gap: 4 }}>
           <Text variant="display">{summary?.farmName || 'My Farm'}</Text>
-          <Text variant="body" tone="muted">{summary?.farmLocation} - {summary?.farmSizeHectares} ha</Text>
+          <Text variant="body" tone="muted">{summary?.farmLocation} - {summary?.farmSizeM2} m²</Text>
         </View>
 
         {mapData && (
@@ -244,7 +244,7 @@ export default function FarmScreen() {
                 <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
                   <View style={{ flex: 1 }}>
                     <Text variant="headline">{field.name}</Text>
-                    <Text variant="caption" tone="muted">{field.crop} - {field.area} ha</Text>
+                    <Text variant="caption" tone="muted">{field.crop} - {field.area} m²</Text>
                   </View>
                   <View style={{ flexDirection: 'row', gap: 10 }}>
                     <TouchableOpacity
@@ -262,6 +262,27 @@ export default function FarmScreen() {
                   </View>
                 </View>
                 <View style={{ flexDirection: 'row', gap: 8, flexWrap: 'wrap' }}>
+                  <Chip
+                    label="Walk boundary"
+                    tone="info"
+                    onPress={() =>
+                      router.push({
+                        pathname: '/walk-boundary',
+                        params: { fieldId: field.id, fieldName: field.name },
+                      })
+                    }
+                  />
+                  <Chip
+                    label="Finances"
+                    tone="success"
+                    onPress={() =>
+                      router.push({
+                        pathname: '/field-finances',
+                        params: { fieldId: field.id, fieldName: field.name },
+                      })
+                    }
+                  />
+                  {field.hasMeasuredBoundary ? <Chip label="Measured" tone="success" /> : null}
                   <Chip label={`Health: ${field.health}%`} tone={field.health >= 70 ? 'success' : 'warning'} />
                   <Chip label={`Moisture: ${field.moisture}%`} tone="info" />
                   {field.daysSincePlanting != null && (
@@ -329,7 +350,7 @@ export default function FarmScreen() {
                   <Text variant="headline">{editingField ? 'Edit field' : 'Add new field'}</Text>
                   <InputField label="Field name" value={fieldName} onChangeText={setFieldName} placeholder="e.g. North Block" />
                   <InputField label="Crop" value={fieldCrop} onChangeText={setFieldCrop} placeholder="e.g. Maize" />
-                  <InputField label="Area (hectares)" value={fieldArea} onChangeText={setFieldArea} keyboardType="decimal-pad" />
+                  <InputField label="Area (m²)" value={fieldArea} onChangeText={setFieldArea} keyboardType="decimal-pad" />
                   <View style={{ flexDirection: 'row', gap: 12 }}>
                     <Button label="Cancel" variant="ghost" onPress={closeFieldModal} style={{ flex: 1 }} />
                     <Button

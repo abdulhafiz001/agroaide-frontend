@@ -11,13 +11,13 @@ import * as Location from 'expo-location';
 import { useToast } from '@/components/Toast';
 import { Button, Chip, InputField, Surface, Text } from '@/design-system/components';
 import { authApi } from '@/services/authApi';
-import { systemApi } from '@/services/systemApi';
 import { ThemePreference } from '@/design-system/theme';
 import { useAppStore, type NotificationPreferences } from '@/store/useAppStore';
 import { ApiError } from '@/services/apiClient';
 import { LANGUAGE_OPTIONS, type SupportedLanguage } from '@/i18n/translations';
 import { useTranslation } from '@/i18n/useTranslation';
 import { clearAuthQueryCache } from '@/utils/queryClient';
+import { countPendingSyncActions, drainSyncQueue } from '@/services/syncEngine';
 
 import styled from '@/design-system/styled';
 
@@ -64,13 +64,6 @@ const SegmentButton = styled.TouchableOpacity<{ active: boolean }>`
   border-color: ${({ theme }) => `${theme.colors.border}80`};
 `;
 
-const ActionRow = styled(TouchableOpacity)`
-  flex-direction: row;
-  justify-content: space-between;
-  align-items: center;
-  padding-vertical: 12px;
-`;
-
 const notificationSettings: {
   key: keyof NotificationPreferences;
   label: string;
@@ -79,7 +72,6 @@ const notificationSettings: {
   { key: 'severeWeather', label: 'Critical weather alerts', description: 'Storms, heat waves & frost advisories.' },
   { key: 'marketMovers', label: 'Market intelligence', description: 'Commodity spikes & best selling days.' },
   { key: 'aiInsights', label: 'AI agronomy tips', description: 'Timely crop health nudges.' },
-  { key: 'communityMentions', label: 'Community updates', description: 'Nearby farmers, forum replies.' },
 ] as const;
 
 const detailSegments = [
@@ -104,15 +96,17 @@ export default function ProfileScreen() {
   const setThemePreference = useAppStore((s) => s.setThemePreference);
   const signOut = useAppStore((s) => s.signOut);
   const accessToken = useAppStore((s) => s.accessToken);
-  const offlineModeEnabled = useAppStore((s) => s.offlineModeEnabled);
-  const setOfflineMode = useAppStore((s) => s.setOfflineMode);
-  const lastSyncISO = useAppStore((s) => s.lastSyncISO);
-  const setLastSync = useAppStore((s) => s.setLastSync);
   const notificationPreferences = useAppStore((s) => s.notificationPreferences);
   const updateNotificationPreferences = useAppStore((s) => s.updateNotificationPreferences);
   const aiAdvisorPreference = useAppStore((s) => s.aiAdvisorPreference);
   const updateAiAdvisorPreference = useAppStore((s) => s.updateAiAdvisorPreference);
   const setProfile = useAppStore((s) => s.setFarmerProfile);
+  const lastSyncISO = useAppStore((s) => s.lastSyncISO);
+  const setLastSync = useAppStore((s) => s.setLastSync);
+  const offlineModeEnabled = useAppStore((s) => s.offlineModeEnabled);
+  const setOfflineMode = useAppStore((s) => s.setOfflineMode);
+  const [pendingSyncCount, setPendingSyncCount] = useState(0);
+  const [syncingNow, setSyncingNow] = useState(false);
 
   const [editMode, setEditMode] = useState(false);
   const [editName, setEditName] = useState('');
@@ -152,13 +146,17 @@ export default function ProfileScreen() {
   }, []);
 
   useEffect(() => {
+    countPendingSyncActions().then(setPendingSyncCount).catch(() => setPendingSyncCount(0));
+  }, [lastSyncISO]);
+
+  useEffect(() => {
     if (profile) {
       setEditName(profile.fullName);
       setEditEmail(profile.email);
       setEditPhone(profile.phoneNumber || '');
       setEditFarmName(profile.farmName || '');
       setEditFarmLocation(profile.farmLocation || '');
-      setEditFarmSize(String(profile.farmSizeHectares || ''));
+      setEditFarmSize(String(profile.farmSizeM2 || ''));
       setEditCrops(profile.crops?.join(', ') || '');
       setEditSoilType(profile.soilType || '');
     }
@@ -167,12 +165,6 @@ export default function ProfileScreen() {
   const meQuery = useQuery({
     queryKey: ['settingsMe'],
     queryFn: () => authApi.me(accessToken ?? ''),
-    enabled: Boolean(accessToken),
-  });
-
-  const supportLinksQuery = useQuery({
-    queryKey: ['supportLinks'],
-    queryFn: () => systemApi.getSupportLinks(accessToken ?? ''),
     enabled: Boolean(accessToken),
   });
 
@@ -189,7 +181,7 @@ export default function ProfileScreen() {
         phoneNumber: editPhone || null,
         farmName: editFarmName || null,
         farmLocation: editFarmLocation || null,
-        farmSizeHectares: parseFloat(editFarmSize) || 0,
+        farmSizeM2: parseFloat(editFarmSize) || 0,
         crops,
         soilType: editSoilType || null,
       };
@@ -224,27 +216,6 @@ export default function ProfileScreen() {
     onError: (err) => {
       const msg = err instanceof ApiError ? err.message : 'Could not change password.';
       toast.error('Error', msg);
-    },
-  });
-
-  const syncMutation = useMutation({
-    mutationFn: async () => {
-      if (!accessToken) return null;
-      return systemApi.syncOfflineBrief(accessToken);
-    },
-    onSuccess: (response) => {
-      setLastSync(response?.syncedAt ?? new Date().toISOString());
-      toast.success('Synced', response?.message ?? 'Offline brief synced.');
-    },
-  });
-
-  const exportMutation = useMutation({
-    mutationFn: async () => {
-      if (!accessToken) return null;
-      return systemApi.requestExport(accessToken);
-    },
-    onSuccess: (response) => {
-      toast.info('Export', response?.message ?? 'Export scheduled.');
     },
   });
 
@@ -371,7 +342,7 @@ export default function ProfileScreen() {
                   ))}
                 </Surface>
               )}
-              <InputField label="Farm size (ha)" value={editFarmSize} onChangeText={setEditFarmSize} keyboardType="decimal-pad" />
+              <InputField label="Farm size (m²)" value={editFarmSize} onChangeText={setEditFarmSize} keyboardType="decimal-pad" />
               <InputField label="Crops (comma separated)" value={editCrops} onChangeText={setEditCrops} placeholder="Maize, Rice, Cassava" />
               <InputField label="Soil type" value={editSoilType} onChangeText={setEditSoilType} />
               <Button
@@ -405,7 +376,7 @@ export default function ProfileScreen() {
               </Row>
               <Row>
                 <Text variant="caption" tone="muted">Size</Text>
-                <Text variant="body">{profile?.farmSizeHectares || 0} ha</Text>
+                <Text variant="body">{profile?.farmSizeM2 || 0} m²</Text>
               </Row>
               <Row>
                 <Text variant="caption" tone="muted">Crops</Text>
@@ -479,6 +450,42 @@ export default function ProfileScreen() {
           </SegmentedControl>
         </Section>
 
+        <Section rounded="xl">
+          <Row>
+            <View style={{ flex: 1, paddingRight: 12 }}>
+              <Text variant="headline">Offline sync</Text>
+              <Text variant="caption" tone="muted">
+                Queue actions offline and push them when you reconnect.
+              </Text>
+            </View>
+            <Switch value={offlineModeEnabled} onValueChange={setOfflineMode} />
+          </Row>
+          <Text variant="body">Pending actions: {pendingSyncCount}</Text>
+          <Text variant="caption" tone="muted">
+            {lastSyncISO ? `Last synced ${new Date(lastSyncISO).toLocaleString()}` : 'Not synced yet'}
+          </Text>
+          <Button
+            label="Sync now"
+            variant="secondary"
+            loading={syncingNow}
+            fullWidth
+            onPress={async () => {
+              if (!accessToken) return;
+              setSyncingNow(true);
+              try {
+                await drainSyncQueue(accessToken);
+                setLastSync(new Date().toISOString());
+                setPendingSyncCount(await countPendingSyncActions());
+                toast.success('Synced', 'Offline queue drained.');
+              } catch {
+                toast.error('Sync failed', 'Could not reach the server.');
+              } finally {
+                setSyncingNow(false);
+              }
+            }}
+          />
+        </Section>
+
         {/* Notifications */}
         <Section rounded="xl">
           <Text variant="headline">Notifications</Text>
@@ -537,39 +544,6 @@ export default function ProfileScreen() {
             </View>
             <Switch value={aiAdvisorPreference.voiceTips} onValueChange={(v) => updateAiAdvisorPreference({ voiceTips: v })} />
           </Row>
-        </Section>
-
-        {/* Offline & Data */}
-        <Section rounded="xl">
-          <Text variant="headline">Offline & data</Text>
-          <Row>
-            <View>
-              <Text variant="body">Offline brief</Text>
-              <Text variant="caption" tone="muted">
-                Cached data. {lastSyncISO ? `Last sync ${new Date(lastSyncISO).toLocaleDateString()}` : 'Not synced'}
-              </Text>
-            </View>
-            <Switch value={offlineModeEnabled} onValueChange={(v) => { setOfflineMode(v); if (v) syncMutation.mutate(); }} />
-          </Row>
-          <Button label="Sync now" variant="secondary" fullWidth onPress={() => syncMutation.mutate()} loading={syncMutation.isPending} />
-          <Button label="Export farm data" variant="ghost" onPress={() => exportMutation.mutate()} loading={exportMutation.isPending} />
-        </Section>
-
-        {/* Support */}
-        <Section rounded="xl">
-          <Text variant="headline">Support & learning</Text>
-          <ActionRow onPress={() => toast.info('Learning center', supportLinksQuery.data?.links?.find((l: any) => l.id === 'help')?.message ?? 'Opening tutorials...')}>
-            <Text variant="body">Help & tutorials</Text>
-            <Ionicons name="chevron-forward" size={18} color={theme.colors.textSecondary} />
-          </ActionRow>
-          <ActionRow onPress={() => toast.info('Extension officer', supportLinksQuery.data?.links?.find((l: any) => l.id === 'extension')?.message ?? 'Connecting...')}>
-            <Text variant="body">Contact extension officer</Text>
-            <Ionicons name="chevron-forward" size={18} color={theme.colors.textSecondary} />
-          </ActionRow>
-          <ActionRow onPress={() => toast.info('Support', supportLinksQuery.data?.links?.find((l: any) => l.id === 'email')?.message ?? 'Email: support@agroaide.ng')}>
-            <Text variant="body">Email support</Text>
-            <Ionicons name="chevron-forward" size={18} color={theme.colors.textSecondary} />
-          </ActionRow>
         </Section>
 
         <Button

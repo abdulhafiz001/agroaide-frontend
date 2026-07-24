@@ -16,7 +16,7 @@ export type RegisterPayload = {
   farmLocation?: string;
   farmLatitude?: number;
   farmLongitude?: number;
-  farmSizeHectares?: number;
+  farmSizeM2?: number;
   soilType?: string;
   irrigationAccess?: FarmerProfile['irrigationAccess'];
   crops?: string[];

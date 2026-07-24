@@ -173,7 +173,7 @@ export default function Dashboard() {
       farmApi.addField(accessToken ?? '', {
         name: newFieldName,
         crop: newFieldCrop,
-        areaHectares: parseFloat(newFieldArea) || 0,
+        areaM2: parseFloat(newFieldArea) || 0,
       }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['farmOverview'] });
@@ -409,7 +409,7 @@ export default function Dashboard() {
                     <Text variant="caption" tone="muted" numberOfLines={1}>{field.crop}</Text>
                     <View style={{ flexDirection: 'row', gap: 6 }}>
                       <Chip label={`${field.health}%`} tone={field.health >= 70 ? 'success' : 'warning'} />
-                      <Chip label={`${field.area} ha`} tone="default" />
+                      <Chip label={`${field.area} m²`} tone="default" />
                     </View>
                   </Surface>
                 </TouchableOpacity>
@@ -518,6 +518,9 @@ export default function Dashboard() {
             <Text variant="headline">{t('soilConditions')}</Text>
             <MoreHorizontal size={20} color={theme.colors.textSecondary} />
           </View>
+          <Text variant="caption" tone="muted" style={{ marginBottom: 4 }}>
+            From Open-Meteo at your farm GPS (moisture/temperature proxies) — not a lab NPK/pH soil test.
+          </Text>
           <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 12 }}>
             {soilHealth.map((metric: any) => {
               const palette = toneToColors[metric.tone as SoilTone] || toneToColors.neutral;
@@ -624,7 +627,7 @@ export default function Dashboard() {
                   <Text variant="headline">Add new farm field</Text>
                   <InputField label="Field name" value={newFieldName} onChangeText={setNewFieldName} placeholder="e.g. North Block" />
                   <InputField label="Crop" value={newFieldCrop} onChangeText={setNewFieldCrop} placeholder="e.g. Maize" />
-                  <InputField label="Area (hectares)" value={newFieldArea} onChangeText={setNewFieldArea} keyboardType="decimal-pad" />
+                  <InputField label="Area (m²)" value={newFieldArea} onChangeText={setNewFieldArea} keyboardType="decimal-pad" />
                   <View style={{ flexDirection: 'row', gap: 12 }}>
                     <Button label="Cancel" variant="ghost" onPress={() => setShowAddFarmModal(false)} style={{ flex: 1 }} />
                     <Button

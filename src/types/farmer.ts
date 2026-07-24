@@ -10,7 +10,7 @@ export interface FarmerProfile {
   farmLocation: string;
   farmLatitude: number | null;
   farmLongitude: number | null;
-  farmSizeHectares: number;
+  farmSizeM2: number;
   crops: string[];
   experienceLevel: ExperienceLevel;
   soilType: string;

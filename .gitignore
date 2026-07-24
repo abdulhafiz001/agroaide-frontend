@@ -43,5 +43,10 @@ app-example
 /ios
 /android
 
-# firebase
+# firebase / secrets
 google-services.json
+GoogleService-Info.plist
+*-firebase-adminsdk-*.json
+service-account*.json
+*.keystore
+credentials.json

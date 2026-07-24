@@ -107,10 +107,56 @@ export default function CalendarScreen() {
     enabled: Boolean(token),
   });
 
+  const seasonalQuery = useQuery({
+    queryKey: ['seasonalSuggestions'],
+    queryFn: () => calendarApi.getSeasonalSuggestions(token),
+    enabled: Boolean(token),
+  });
+
+  const watchesQuery = useQuery({
+    queryKey: ['cropWatches'],
+    queryFn: () => calendarApi.listCropWatches(token),
+    enabled: Boolean(token),
+  });
+
+  const WATCHABLE_CROPS = ['Maize', 'Cassava', 'Yam', 'Tomato', 'Rice', 'Sorghum', 'Millet', 'Cowpea'];
+
   const invalidate = () => {
     queryClient.invalidateQueries({ queryKey: ['calendar'] });
     queryClient.invalidateQueries({ queryKey: ['dashboardSnapshot'] });
   };
+
+  const acceptSuggestionMutation = useMutation({
+    mutationFn: async (suggestion: { crop: string; plantingWindowActive: boolean }) => {
+      return calendarApi.createTask(token, {
+        title: `Start planting ${suggestion.crop}`,
+        description: `Seasonal suggestion for your ${seasonalQuery.data?.zoneLabel ?? 'zone'}. Planting window is open.`,
+        scheduledDate: selectedDate,
+        period: 'morning',
+        durationMinutes: 60,
+        impact: 'high',
+      });
+    },
+    onSuccess: () => {
+      invalidate();
+      toast.success('Task added', 'Planting task added to your calendar.');
+    },
+    onError: () => toast.error('Error', 'Could not create planting task.'),
+  });
+
+  const watchMutation = useMutation({
+    mutationFn: (crop: string) => calendarApi.addCropWatch(token, { crop, notifyWhenPlantingWindow: true }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['cropWatches'] });
+      toast.success('Watching', 'You will be notified when planting time arrives.');
+    },
+    onError: () => toast.error('Error', 'Could not save crop watch.'),
+  });
+
+  const unwatchMutation = useMutation({
+    mutationFn: (id: string) => calendarApi.removeCropWatch(token, id),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['cropWatches'] }),
+  });
 
   const createMutation = useMutation({
     mutationFn: () => calendarApi.createTask(token, {
@@ -183,6 +229,72 @@ export default function CalendarScreen() {
           <Text variant="display">Calendar</Text>
           <Text variant="body" tone="muted">Plan and track your farm activities</Text>
         </View>
+
+        <Section>
+          <Surface rounded="xl" style={{ gap: 10, backgroundColor: `${theme.colors.primary}12` }}>
+            <Text variant="eyebrow" tone="accent">
+              Season · {seasonalQuery.data?.zoneLabel ?? '…'}
+            </Text>
+            <Text variant="headline">
+              {seasonalQuery.data?.season?.isRainy ? 'Rainy season window' : 'Dry season window'}
+            </Text>
+            <Text variant="caption" tone="muted">
+              Auto suggestions from crop calendars for Nigeria — no AI guesswork.
+            </Text>
+            {(seasonalQuery.data?.suggestions ?? [])
+              .filter((s) => s.plantingWindowActive)
+              .map((s) => (
+                <Surface key={s.crop} rounded="lg" style={{ gap: 8 }}>
+                  <Text variant="headline">It&apos;s time for {s.crop}</Text>
+                  <Text variant="caption" tone="muted">
+                    Planting months: {(s.plantingMonths ?? []).join(', ')}
+                  </Text>
+                  <View style={{ flexDirection: 'row', gap: 8, flexWrap: 'wrap' }}>
+                    <Chip
+                      label="Add planting task"
+                      tone="success"
+                      onPress={() => acceptSuggestionMutation.mutate(s)}
+                    />
+                    <Chip
+                      label="Watch alerts"
+                      tone="info"
+                      onPress={() => watchMutation.mutate(s.crop)}
+                    />
+                  </View>
+                </Surface>
+              ))}
+            {(seasonalQuery.data?.suggestions ?? []).filter((s) => s.plantingWindowActive).length === 0 ? (
+              <Text variant="caption" tone="muted">
+                No planting windows open for your crops right now. Add watches below to get notified later.
+              </Text>
+            ) : null}
+          </Surface>
+        </Section>
+
+        <Section>
+          <Text variant="headline">Crop watches</Text>
+          <Text variant="caption" tone="muted">
+            Pick crops you want alerts for when planting time starts in your zone.
+          </Text>
+          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+            {WATCHABLE_CROPS.map((crop) => {
+              const existing = (watchesQuery.data?.watches ?? []).find(
+                (w) => w.crop.toLowerCase() === crop.toLowerCase(),
+              );
+              return (
+                <Chip
+                  key={crop}
+                  label={existing ? `✓ ${crop}` : crop}
+                  tone={existing ? 'success' : 'default'}
+                  onPress={() => {
+                    if (existing) unwatchMutation.mutate(existing.id);
+                    else watchMutation.mutate(crop);
+                  }}
+                />
+              );
+            })}
+          </View>
+        </Section>
 
         <Section>
           <Calendar

@@ -97,8 +97,8 @@ export default function CompleteFarmScreen() {
   const searchTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const [farmName, setFarmName] = useState(profile?.farmName && profile.farmName !== 'My Farm' ? profile.farmName : '');
-  const [farmSizeHectares, setFarmSizeHectares] = useState(
-    profile?.farmSizeHectares ? String(profile.farmSizeHectares) : '',
+  const [farmSizeM2, setFarmSizeM2] = useState(
+    profile?.farmSizeM2 ? String(profile.farmSizeM2) : '',
   );
   const [soilType, setSoilType] = useState(profile?.soilType && profile.soilType !== 'Loamy' ? profile.soilType : '');
   const [irrigationAccess, setIrrigationAccess] = useState<(typeof irrigationOptions)[number]>(
@@ -210,14 +210,14 @@ export default function CompleteFarmScreen() {
         .split(',')
         .map((c) => c.trim())
         .filter(Boolean);
-      const size = farmSizeHectares ? Number(farmSizeHectares) : undefined;
+      const size = farmSizeM2 ? Number(farmSizeM2) : undefined;
 
       return authApi.updateProfile(accessToken ?? '', {
         farmName: farmName.trim() || undefined,
         farmLocation: farmLocation || undefined,
         farmLatitude,
         farmLongitude,
-        ...(typeof size === 'number' && !Number.isNaN(size) ? { farmSizeHectares: size } : {}),
+        ...(typeof size === 'number' && !Number.isNaN(size) ? { farmSizeM2: size } : {}),
         ...(soilType ? { soilType } : {}),
         ...(cropList.length ? { crops: cropList } : {}),
         experienceLevel,
@@ -276,9 +276,9 @@ export default function CompleteFarmScreen() {
                   List the main crops you grow (comma separated). Disease alerts and market tips are matched to these.
                 </Text>
                 <InputField
-                  label="Farm size (hectares)"
-                  value={farmSizeHectares}
-                  onChangeText={setFarmSizeHectares}
+                  label="Farm size (m²)"
+                  value={farmSizeM2}
+                  onChangeText={setFarmSizeM2}
                   keyboardType="decimal-pad"
                 />
                 <InputField

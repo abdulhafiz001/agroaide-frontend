@@ -20,13 +20,6 @@ export const marketApi = {
     return apiRequest<MarketIntelResponse>('/market/intel', { token });
   },
 
-  getNearbyFarmers(token: string) {
-    return apiRequest<{
-      farmers: any[];
-      message: string;
-    }>('/market/nearby-farmers', { token });
-  },
-
   getResources(token: string) {
     return apiRequest<{
       resources: {

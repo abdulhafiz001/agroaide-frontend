@@ -7,6 +7,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { ToastProvider } from '@/components/Toast';
 import { DesignSystemProvider, useThemeController } from '@/design-system/DesignSystemProvider';
+import { SyncBootstrap } from '@/providers/SyncBootstrap';
 import { queryClient } from '@/utils/queryClient';
 
 export const AppProviders: React.FC<React.PropsWithChildren> = ({ children }) => {
@@ -24,6 +25,7 @@ export const AppProviders: React.FC<React.PropsWithChildren> = ({ children }) =>
         <DesignSystemProvider>
           <QueryClientProvider client={queryClient}>
             <ToastProvider>
+              <SyncBootstrap />
               <ThemeAwareStatusBar />
               {children}
             </ToastProvider>
