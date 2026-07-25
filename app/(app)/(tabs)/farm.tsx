@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'expo-router';
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import {
   ActivityIndicator,
   KeyboardAvoidingView,
@@ -11,7 +11,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import { FarmMapView } from '@/components/FarmMapView';
+import { FarmMapView, type FarmMapViewHandle } from '@/components/FarmMapView';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme } from 'styled-components/native';
 
@@ -101,6 +101,7 @@ export default function FarmScreen() {
   const token = useAppStore((s) => s.accessToken) ?? '';
   const profile = useAppStore((s) => s.farmerProfile);
   const queryClient = useQueryClient();
+  const mapRef = useRef<FarmMapViewHandle>(null);
 
   const [showFieldModal, setShowFieldModal] = useState(false);
   const [showJournalModal, setShowJournalModal] = useState(false);
@@ -237,7 +238,14 @@ export default function FarmScreen() {
     <Screen>
       <Container>
         <View style={{ paddingTop: 16, gap: 4 }}>
-          <Text variant="display">{summary?.farmName || 'My Farm'}</Text>
+          <TouchableOpacity
+            activeOpacity={0.7}
+            disabled={!mapData?.center}
+            onPress={() => mapRef.current?.zoomToFarm()}
+            hitSlop={{ top: 8, bottom: 8, left: 4, right: 4 }}
+          >
+            <Text variant="display">{summary?.farmName || 'My Farm'}</Text>
+          </TouchableOpacity>
           <Text variant="body" tone="muted">
             {summary?.farmLocation} · {formatAreaWithFt(summary?.farmSizeM2)}
           </Text>
@@ -247,6 +255,7 @@ export default function FarmScreen() {
           <Section>
             <View style={{ height: 220, borderRadius: 16, overflow: 'hidden' }}>
               <FarmMapView
+                ref={mapRef}
                 center={mapData.center}
                 polygon={mapData.polygon}
                 farmName={summary?.farmName}
@@ -284,13 +293,33 @@ export default function FarmScreen() {
             fields.map((field) => (
               <FieldCard key={field.id} rounded="xl">
                 <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <View style={{ flex: 1 }}>
+                  <TouchableOpacity
+                    style={{ flex: 1 }}
+                    activeOpacity={0.7}
+                    onPress={() =>
+                      router.push({
+                        pathname: '/field-detail',
+                        params: { fieldId: field.id, fieldName: field.name },
+                      })
+                    }
+                  >
                     <Text variant="headline">{field.name}</Text>
                     <Text variant="caption" tone="muted">
                       {field.crop} · {formatAreaWithFt(field.area)}
                     </Text>
-                  </View>
+                  </TouchableOpacity>
                   <View style={{ flexDirection: 'row', gap: 10 }}>
+                    <TouchableOpacity
+                      onPress={() =>
+                        router.push({
+                          pathname: '/field-detail',
+                          params: { fieldId: field.id, fieldName: field.name },
+                        })
+                      }
+                      style={{ backgroundColor: `${theme.colors.primary}18`, borderRadius: 14, padding: 4 }}
+                    >
+                      <Ionicons name="eye-outline" size={20} color={theme.colors.primary} />
+                    </TouchableOpacity>
                     <TouchableOpacity
                       onPress={() => router.push({ pathname: '/farm-scan', params: { fieldId: field.id, fieldName: field.name, fieldCrop: field.crop } })}
                       style={{ backgroundColor: `${theme.colors.accent}20`, borderRadius: 14, padding: 4 }}
@@ -319,6 +348,16 @@ export default function FarmScreen() {
                   </View>
                 )}
                 <View style={{ flexDirection: 'row', gap: 8, flexWrap: 'wrap' }}>
+                  <Chip
+                    label="Details"
+                    tone="info"
+                    onPress={() =>
+                      router.push({
+                        pathname: '/field-detail',
+                        params: { fieldId: field.id, fieldName: field.name },
+                      })
+                    }
+                  />
                   <Chip
                     label="Walk boundary"
                     tone="info"

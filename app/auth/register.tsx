@@ -133,6 +133,7 @@ export default function RegisterScreen() {
   const [step, setStep] = useState(1);
   const [form, setForm] = useState<RegistrationForm>(initialForm);
   const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
   const [locationQuery, setLocationQuery] = useState('');
   const [locationResults, setLocationResults] = useState<LocationResult[]>([]);
@@ -334,7 +335,16 @@ export default function RegisterScreen() {
         label="Confirm password"
         value={form.passwordConfirmation}
         onChangeText={(t) => updateForm('passwordConfirmation', t)}
-        secureTextEntry={!showPassword}
+        secureTextEntry={!showConfirmPassword}
+        rightElement={
+          <Pressable onPress={() => setShowConfirmPassword((p) => !p)} hitSlop={8}>
+            <Ionicons
+              name={showConfirmPassword ? 'eye-off-outline' : 'eye-outline'}
+              size={20}
+              color={theme.colors.textSecondary}
+            />
+          </Pressable>
+        }
       />
       {form.passwordConfirmation && form.password !== form.passwordConfirmation ? (
         <Chip label="Passwords do not match" tone="danger" />

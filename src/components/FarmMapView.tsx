@@ -1,6 +1,6 @@
-import React, { useMemo } from 'react';
+import React, { forwardRef, useImperativeHandle, useMemo, useRef } from 'react';
 
-import { LeafletMap } from '@/components/LeafletMap';
+import { LeafletMap, type LeafletMapHandle } from '@/components/LeafletMap';
 
 type MapCoordinate = { latitude: number; longitude: number };
 
@@ -13,45 +13,79 @@ export type FarmMapFieldPolygon = {
 
 type FarmMapViewProps = {
   center: MapCoordinate;
-  /** Fallback farm outline when no measured fields exist */
+  /** Farm outline sized from registered farmSizeM2 */
   polygon?: MapCoordinate[];
   /** Measured crop-field polygons inside the farm */
   fields?: FarmMapFieldPolygon[];
   farmName?: string;
 };
 
+export type FarmMapViewHandle = {
+  zoomToFarm: () => void;
+};
+
 const FIELD_COLORS = ['#57b346', '#3b82f6', '#db9534', '#8b5cf6', '#14b8a6', '#e63946'];
 
-export function FarmMapView({ center, polygon = [], fields = [], farmName }: FarmMapViewProps) {
-  const measured = useMemo(
-    () =>
-      fields
-        .filter((f) => f.polygon.length >= 3)
-        .map((f, index) => ({
+export const FarmMapView = forwardRef<FarmMapViewHandle, FarmMapViewProps>(function FarmMapView(
+  { center, polygon = [], fields = [], farmName },
+  ref,
+) {
+  const mapRef = useRef<LeafletMapHandle>(null);
+
+  const polygons = useMemo(() => {
+    const layers: Array<{
+      coordinates: MapCoordinate[];
+      color: string;
+      fillOpacity: number;
+      label?: string;
+    }> = [];
+
+    // Always draw the farm outline (outer boundary) when we have one.
+    if (polygon.length >= 3) {
+      layers.push({
+        coordinates: polygon,
+        color: '#1b4332',
+        fillOpacity: 0.08,
+        label: farmName || 'Farm',
+      });
+    }
+
+    // Crop fields sit inside the farm.
+    fields
+      .filter((f) => f.polygon.length >= 3)
+      .forEach((f, index) => {
+        layers.push({
           coordinates: f.polygon,
           color: FIELD_COLORS[index % FIELD_COLORS.length],
-          fillOpacity: 0.28,
+          fillOpacity: 0.32,
           label: f.crop ? `${f.name} · ${f.crop}` : f.name,
-        })),
-    [fields],
-  );
+        });
+      });
 
-  const polygons =
-    measured.length > 0
-      ? measured
-      : polygon.length > 0
-        ? [
-            {
-              coordinates: polygon,
-              color: '#57b346',
-              fillOpacity: 0.15,
-              label: farmName || 'Farm',
-            },
-          ]
-        : [];
+    return layers;
+  }, [polygon, fields, farmName]);
+
+  useImperativeHandle(
+    ref,
+    () => ({
+      zoomToFarm: () => {
+        mapRef.current?.animateToRegion(
+          {
+            latitude: center.latitude,
+            longitude: center.longitude,
+            latitudeDelta: 0.008,
+            longitudeDelta: 0.008,
+          },
+          600,
+        );
+      },
+    }),
+    [center.latitude, center.longitude],
+  );
 
   return (
     <LeafletMap
+      ref={mapRef}
       center={center}
       zoom={16}
       scrollEnabled={false}
@@ -60,10 +94,10 @@ export function FarmMapView({ center, polygon = [], fields = [], farmName }: Far
           latitude: center.latitude,
           longitude: center.longitude,
           title: farmName || 'Farm',
-          color: '#57b346',
+          color: '#1b4332',
         },
       ]}
       polygons={polygons}
     />
   );
-}
+});

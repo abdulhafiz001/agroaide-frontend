@@ -180,6 +180,7 @@ function buildHtml({
     function animateTo(lat, lng, zoomLevel) {
       map.flyTo([lat, lng], zoomLevel || map.getZoom(), { duration: 0.6 });
     }
+    window.animateTo = animateTo;
 
     document.addEventListener('message', function (event) {
       try {
@@ -233,7 +234,7 @@ export const LeafletMap = forwardRef<LeafletMapHandle, LeafletMapProps>(function
           ? Math.max(3, Math.min(18, Math.round(Math.log2(360 / region.latitudeDelta))))
           : zoom;
       webRef.current?.injectJavaScript(
-        `animateTo(${region.latitude}, ${region.longitude}, ${nextZoom}); true;`,
+        `window.animateTo && window.animateTo(${region.latitude}, ${region.longitude}, ${nextZoom}); true;`,
       );
     },
   }));

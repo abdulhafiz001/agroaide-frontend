@@ -93,6 +93,14 @@ export const farmApi = {
     return apiRequest<FarmOverviewResponse>('/farm/overview', { token });
   },
 
+  getField(token: string, fieldId: string) {
+    return apiRequest<{
+      field: FarmField;
+      farmSummary: FarmOverviewResponse['farmSummary'];
+      map: FarmOverviewResponse['map'];
+    }>(`/farm/fields/${fieldId}`, { token });
+  },
+
   addField(token: string, payload: { name: string; crop: string; areaM2?: number; plantedAt?: string; clientUuid?: string }) {
     return apiRequest<{ field: FarmField }>('/farm/fields', {
       method: 'POST',
@@ -219,9 +227,15 @@ export const farmApi = {
   },
 
   exportEconomics(token: string, fieldId: string) {
-    return apiRequest<{ downloadUrl?: string; content?: string; filename: string; mimeType: string }>(
-      `/farm/fields/${fieldId}/economics/export?format=pdf`,
-      { token },
-    );
+    return apiRequest<{
+      downloadUrl?: string;
+      content?: string;
+      filename: string;
+      mimeType: string;
+      encoding?: string;
+    }>(`/farm/fields/${fieldId}/economics/export?format=pdf`, {
+      token,
+      timeoutMs: 90000,
+    });
   },
 };

@@ -148,17 +148,34 @@ export default function FieldFinancesScreen() {
         const baseDir = FileSystem.documentDirectory ?? FileSystem.cacheDirectory;
         if (!baseDir) throw new Error('No writable directory');
         const path = `${baseDir}${res.filename}`;
-        await FileSystem.writeAsStringAsync(path, res.content ?? '', {
-          encoding: FileSystem.EncodingType.Base64,
-        });
+
+        // Prefer inline base64 (works offline from the export response). Fall back to signed URL.
+        if (res.content) {
+          const isBase64 =
+            res.encoding === 'base64' ||
+            res.mimeType.includes('pdf') ||
+            Boolean(res.content && /^[A-Za-z0-9+/=\s]+$/.test(res.content.slice(0, 80)));
+          await FileSystem.writeAsStringAsync(path, res.content, {
+            encoding: isBase64 ? FileSystem.EncodingType.Base64 : FileSystem.EncodingType.UTF8,
+          });
+        } else if (res.downloadUrl) {
+          const downloaded = await FileSystem.downloadAsync(res.downloadUrl, path);
+          if (downloaded.status !== 200) {
+            throw new Error(`Download failed (${downloaded.status})`);
+          }
+        } else {
+          throw new Error('Export response had no file content');
+        }
+
         setExportPath(path);
         setExportFilename(res.filename);
         setShowExportModal(true);
-      } catch {
-        toast.error('Export failed', 'Could not save the PDF.');
+      } catch (e: any) {
+        toast.error('Export failed', e?.message || 'Could not save the PDF.');
       }
     },
-    onError: () => toast.error('Export failed', 'Server could not generate the file.'),
+    onError: (err: any) =>
+      toast.error('Export failed', err?.message || 'Server could not generate the file.'),
   });
 
   const shareExport = async () => {

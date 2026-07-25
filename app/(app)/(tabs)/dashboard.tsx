@@ -414,7 +414,16 @@ export default function Dashboard() {
           ) : (
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 12, paddingRight: 16 }}>
               {farmData.fields.slice(0, 5).map((field: FarmField) => (
-                <TouchableOpacity key={field.id} onPress={() => router.push('/(app)/(tabs)/farm')} activeOpacity={0.7}>
+                <TouchableOpacity
+                  key={field.id}
+                  onPress={() =>
+                    router.push({
+                      pathname: '/field-detail',
+                      params: { fieldId: field.id, fieldName: field.name },
+                    })
+                  }
+                  activeOpacity={0.7}
+                >
                   <Surface
                     rounded="xl"
                     style={{
@@ -438,7 +447,7 @@ export default function Dashboard() {
                     <Text variant="caption" tone="muted" numberOfLines={1}>{field.crop}</Text>
                     <View style={{ flexDirection: 'row', gap: 6 }}>
                       <Chip label={`${field.health}%`} tone={field.health >= 70 ? 'success' : 'warning'} />
-                      <Chip label={formatAreaWithFt(field.area)} tone="default" />
+                      {/* <Chip label={formatAreaWithFt(field.area)} tone="default" /> */}
                     </View>
                   </Surface>
                 </TouchableOpacity>
