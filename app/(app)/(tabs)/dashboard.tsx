@@ -38,6 +38,7 @@ import { useAppStore } from '@/store/useAppStore';
 import { useTranslation } from '@/i18n/useTranslation';
 import { clearAuthQueryCache } from '@/utils/queryClient';
 import { isFarmProfileComplete } from '@/utils/farmProfile';
+import { formatAreaWithFt } from '@/utils/formatters';
 
 const Screen = styled(SafeAreaView)`
   flex: 1;
@@ -133,6 +134,9 @@ export default function Dashboard() {
   const [newFieldName, setNewFieldName] = useState('');
   const [newFieldCrop, setNewFieldCrop] = useState('');
   const [newFieldArea, setNewFieldArea] = useState('');
+  const [walkAfterSave, setWalkAfterSave] = useState(true);
+
+  const profileCrops = farmerProfile?.crops?.filter(Boolean) ?? [];
 
   const {
     data: payload,
@@ -175,10 +179,19 @@ export default function Dashboard() {
         crop: newFieldCrop,
         areaM2: parseFloat(newFieldArea) || 0,
       }),
-    onSuccess: () => {
+    onSuccess: (res) => {
       queryClient.invalidateQueries({ queryKey: ['farmOverview'] });
       setShowAddFarmModal(false);
-      setNewFieldName(''); setNewFieldCrop(''); setNewFieldArea('');
+      setNewFieldName('');
+      setNewFieldCrop('');
+      setNewFieldArea('');
+      toast.success('Field added', walkAfterSave ? 'Walk the boundary when you are at the farm.' : 'You can walk the boundary later.');
+      if (walkAfterSave && res.field?.id) {
+        router.push({
+          pathname: '/walk-boundary',
+          params: { fieldId: res.field.id, fieldName: res.field.name },
+        });
+      }
     },
     onError: () => toast.error('Error', 'Could not add farm field.'),
   });
@@ -370,7 +383,15 @@ export default function Dashboard() {
           <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
             <Text variant="headline">{t('myFarms')}</Text>
             <View style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
-              <Chip label="+ Add" tone="success" onPress={() => setShowAddFarmModal(true)} />
+              <Chip
+                label="+ Add"
+                tone="success"
+                onPress={() => {
+                  setNewFieldCrop(profileCrops[0] ?? '');
+                  setWalkAfterSave(true);
+                  setShowAddFarmModal(true);
+                }}
+              />
               <TouchableOpacity onPress={() => router.push('/(app)/(tabs)/farm')}>
                 <Text variant="caption" tone="accent">View all</Text>
               </TouchableOpacity>
@@ -380,7 +401,15 @@ export default function Dashboard() {
             <Surface rounded="xl" style={{ padding: 24, alignItems: 'center', gap: 8 }}>
               <Sprout size={32} color={theme.colors.textSecondary} />
               <Text tone="muted">No farm fields yet.</Text>
-              <Button label="Add your first farm" variant="secondary" onPress={() => setShowAddFarmModal(true)} />
+              <Button
+                label="Add your first field"
+                variant="secondary"
+                onPress={() => {
+                  setNewFieldCrop(profileCrops[0] ?? '');
+                  setWalkAfterSave(true);
+                  setShowAddFarmModal(true);
+                }}
+              />
             </Surface>
           ) : (
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 12, paddingRight: 16 }}>
@@ -409,12 +438,19 @@ export default function Dashboard() {
                     <Text variant="caption" tone="muted" numberOfLines={1}>{field.crop}</Text>
                     <View style={{ flexDirection: 'row', gap: 6 }}>
                       <Chip label={`${field.health}%`} tone={field.health >= 70 ? 'success' : 'warning'} />
-                      <Chip label={`${field.area} m²`} tone="default" />
+                      <Chip label={formatAreaWithFt(field.area)} tone="default" />
                     </View>
                   </Surface>
                 </TouchableOpacity>
               ))}
-              <TouchableOpacity onPress={() => setShowAddFarmModal(true)} activeOpacity={0.7}>
+              <TouchableOpacity
+                onPress={() => {
+                  setNewFieldCrop(profileCrops[0] ?? '');
+                  setWalkAfterSave(true);
+                  setShowAddFarmModal(true);
+                }}
+                activeOpacity={0.7}
+              >
                 <Surface
                   rounded="xl"
                   style={{
@@ -569,9 +605,12 @@ export default function Dashboard() {
                   <WeatherIcon size={28} color={index === 0 ? '#fcd34d' : theme.colors.textSecondary} />
                   <Text variant="headline" tone={index === 0 ? 'inverse' : 'default'}>{day.high}°</Text>
                   <Text variant="caption" tone={index === 0 ? 'inverse' : 'muted'}>{day.low}°</Text>
-                  {day.precipitation > 0 ? (
+                  {(day.precipitationProbability > 0 || day.precipitation > 0) ? (
                     <Text variant="caption" tone="accent">
-                      <Droplets size={10} color="#38bdf8" /> {day.precipitation}mm
+                      <Droplets size={10} color="#38bdf8" />{' '}
+                      {day.precipitationProbability > 0
+                        ? `${Math.round(day.precipitationProbability)}% rain`
+                        : `${day.precipitation}mm`}
                     </Text>
                   ) : null}
                 </Surface>
@@ -626,12 +665,45 @@ export default function Dashboard() {
                 <View style={{ gap: 16 }}>
                   <Text variant="headline">Add new farm field</Text>
                   <InputField label="Field name" value={newFieldName} onChangeText={setNewFieldName} placeholder="e.g. North Block" />
-                  <InputField label="Crop" value={newFieldCrop} onChangeText={setNewFieldCrop} placeholder="e.g. Maize" />
-                  <InputField label="Area (m²)" value={newFieldArea} onChangeText={setNewFieldArea} keyboardType="decimal-pad" />
+                  <Text variant="caption" tone="muted">Crop planted on this field</Text>
+                  {profileCrops.length > 0 ? (
+                    <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+                      {profileCrops.map((crop) => (
+                        <Chip
+                          key={crop}
+                          label={crop}
+                          tone={newFieldCrop === crop ? 'success' : 'default'}
+                          onPress={() => setNewFieldCrop(crop)}
+                        />
+                      ))}
+                    </View>
+                  ) : (
+                    <InputField
+                      label="Crop"
+                      value={newFieldCrop}
+                      onChangeText={setNewFieldCrop}
+                      placeholder="Add crops in Settings first"
+                    />
+                  )}
+                  <InputField
+                    label="Area estimate (m²) — optional"
+                    value={newFieldArea}
+                    onChangeText={setNewFieldArea}
+                    keyboardType="decimal-pad"
+                    placeholder="Leave blank and walk the boundary"
+                  />
+                  {newFieldArea ? (
+                    <Text variant="caption" tone="muted">{formatAreaWithFt(parseFloat(newFieldArea) || 0)}</Text>
+                  ) : null}
+                  <Chip
+                    label={walkAfterSave ? '✓ Walk boundary after save' : 'Skip walk for now'}
+                    tone={walkAfterSave ? 'info' : 'default'}
+                    onPress={() => setWalkAfterSave((v) => !v)}
+                  />
                   <View style={{ flexDirection: 'row', gap: 12 }}>
                     <Button label="Cancel" variant="ghost" onPress={() => setShowAddFarmModal(false)} style={{ flex: 1 }} />
                     <Button
-                      label="Add farm"
+                      label="Add field"
                       onPress={() => addFieldMutation.mutate()}
                       loading={addFieldMutation.isPending}
                       disabled={!newFieldName || !newFieldCrop}

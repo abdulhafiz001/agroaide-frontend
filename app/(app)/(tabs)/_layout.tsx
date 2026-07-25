@@ -22,7 +22,7 @@ export default function TabsLayout() {
         headerShown: false,
         tabBarActiveTintColor: theme.colors.primary,
         tabBarInactiveTintColor: theme.colors.textSecondary,
-        tabBarLabelStyle: { fontFamily: 'Inter_500Medium', fontSize: 12 },
+        tabBarLabelStyle: { fontFamily: 'Inter_500Medium', fontSize: 10, marginBottom: 10 },
         tabBarStyle: {
           backgroundColor: theme.colors.surface,
           borderTopColor: `${theme.colors.border}40`,

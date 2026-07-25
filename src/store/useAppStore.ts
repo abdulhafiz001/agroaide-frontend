@@ -12,6 +12,10 @@ export type NotificationPreferences = {
   marketMovers: boolean;
   aiInsights: boolean;
   communityMentions: boolean;
+  plantingWindowAlerts: boolean;
+  fieldBoundaryReminders: boolean;
+  /** Always on — cannot be disabled in the UI. */
+  diseaseOutbreak: boolean;
 };
 
 export type AiAdvisorPreference = {
@@ -57,6 +61,9 @@ export const useAppStore = create<AppState>()(
         marketMovers: true,
         aiInsights: true,
         communityMentions: false,
+        plantingWindowAlerts: true,
+        fieldBoundaryReminders: true,
+        diseaseOutbreak: true,
       },
       aiAdvisorPreference: {
         detailLevel: 'balanced',

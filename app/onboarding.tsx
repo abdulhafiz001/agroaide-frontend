@@ -1,54 +1,100 @@
-import LottieView from 'lottie-react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import React, { useMemo, useRef, useState } from 'react';
-import { Dimensions, FlatList, type ListRenderItemInfo, View } from 'react-native';
-import styled from '@/design-system/styled';
+import { Dimensions, FlatList, type ListRenderItemInfo } from 'react-native';
 
 import { Button, Surface, Text } from '@/design-system/components';
+import styled from '@/design-system/styled';
 import { useAppStore } from '@/store/useAppStore';
 
 const { width } = Dimensions.get('window');
 const SLIDE_WIDTH = width;
 
-const slides = [
+type Slide = {
+  key: 'seed' | 'weather' | 'profile';
+  title: string;
+  description: string;
+  icon: keyof typeof Ionicons.glyphMap;
+  iconColor: string;
+  iconBg: string;
+};
+
+const slides: Slide[] = [
   {
     key: 'seed',
     title: 'Cultivate Intelligence',
-    description: 'Harness AI guidance tailored to Nigerian fields, every single day.',
-    animation: require('@/assets/lottie/growing-seed.json'),
+    description: 'Get AI guidance tailored to Nigerian fields, every single day.',
+    icon: 'leaf',
+    iconColor: '#57b346',
+    iconBg: '#57b34622',
   },
   {
     key: 'weather',
     title: 'Weather-smart Decisions',
     description: 'Seven-day critical alerts, rainfall insights, and irrigation cues you can trust.',
-    animation: require('@/assets/lottie/weather-intel.json'),
+    icon: 'partly-sunny',
+    iconColor: '#3b82f6',
+    iconBg: '#3b82f622',
   },
   {
     key: 'profile',
     title: 'Personalized Agronomy',
     description: 'Tell us about your farm so AgroAide can optimize crops, tasks, and markets.',
-    animation: require('@/assets/lottie/personalize.json'),
+    icon: 'person-circle',
+    iconColor: '#db9534',
+    iconBg: '#db953422',
   },
 ];
 
 const Screen = styled.SafeAreaView`
   flex: 1;
   background-color: ${({ theme }) => theme.colors.background};
-  padding: ${({ theme }) => theme.spacing.lg}px ${({ theme }) => theme.spacing.md}px;
+  padding-top: ${({ theme }) => theme.spacing.lg}px;
+  padding-bottom: ${({ theme }) => theme.spacing.lg}px;
 `;
 
-const SlideContainer = styled(Surface)`
-  width: ${width - 48}px;
-  align-self: center;
+const SlidePage = styled.View`
+  width: ${SLIDE_WIDTH}px;
+  padding-horizontal: ${({ theme }) => theme.spacing.md}px;
+  justify-content: center;
+`;
+
+const SlideCard = styled(Surface)`
   align-items: center;
-  gap: ${({ theme }) => theme.spacing.md}px;
+  gap: ${({ theme }) => theme.spacing.lg}px;
+  padding: ${({ theme }) => theme.spacing.xl}px ${({ theme }) => theme.spacing.lg}px;
+`;
+
+const IconHalo = styled.View<{ $bg: string }>`
+  width: 168px;
+  height: 168px;
+  border-radius: 84px;
+  align-items: center;
+  justify-content: center;
+  background-color: ${({ $bg }) => $bg};
+`;
+
+const IconDisc = styled.View<{ $bg: string }>`
+  width: 112px;
+  height: 112px;
+  border-radius: 56px;
+  align-items: center;
+  justify-content: center;
   background-color: ${({ theme }) => theme.colors.surface};
+  border-width: 2px;
+  border-color: ${({ $bg }) => $bg};
+`;
+
+const CopyBlock = styled.View`
+  gap: ${({ theme }) => theme.spacing.sm}px;
+  padding-horizontal: ${({ theme }) => theme.spacing.sm}px;
 `;
 
 const PaginatorTrack = styled.View`
   flex-direction: row;
   justify-content: center;
   gap: ${({ theme }) => theme.spacing.xs}px;
+  margin-top: ${({ theme }) => theme.spacing.lg}px;
 `;
 
 const Dot = styled.View<{ active: boolean }>`
@@ -62,6 +108,7 @@ const ActionRow = styled.View`
   flex-direction: row;
   align-items: center;
   margin-top: ${({ theme }) => theme.spacing.lg}px;
+  padding-horizontal: ${({ theme }) => theme.spacing.md}px;
   gap: ${({ theme }) => theme.spacing.sm}px;
 `;
 
@@ -71,7 +118,7 @@ const ActionButtonSlot = styled.View`
 
 export default function OnboardingScreen() {
   const router = useRouter();
-  const flatListRef = useRef<FlatList<(typeof slides)[number]>>(null);
+  const flatListRef = useRef<FlatList<Slide>>(null);
   const [activeIndex, setActiveIndex] = useState(0);
   const completeOnboarding = useAppStore((state) => state.completeOnboarding);
 
@@ -96,21 +143,27 @@ export default function OnboardingScreen() {
     goToSlide(activeIndex + 1);
   };
 
-  const renderItem = ({ item }: ListRenderItemInfo<(typeof slides)[0]>) => (
-    <SlideContainer variant="muted" rounded="xl">
-      <LottieView autoPlay loop style={{ width: width / 1.4, height: 260 }} source={item.animation} />
-      <View>
-        <Text variant="eyebrow" tone="accent" align="center">
-          AgroAide
-        </Text>
-        <Text variant="display" align="center">
-          {item.title}
-        </Text>
-        <Text variant="body" tone="muted" align="center">
-          {item.description}
-        </Text>
-      </View>
-    </SlideContainer>
+  const renderItem = ({ item }: ListRenderItemInfo<Slide>) => (
+    <SlidePage>
+      <SlideCard variant="muted" rounded="xl">
+        <IconHalo $bg={item.iconBg}>
+          <IconDisc $bg={item.iconColor}>
+            <Ionicons name={item.icon} size={56} color={item.iconColor} />
+          </IconDisc>
+        </IconHalo>
+        <CopyBlock>
+          <Text variant="eyebrow" tone="accent" align="center">
+            AgroAide
+          </Text>
+          <Text variant="display" align="center">
+            {item.title}
+          </Text>
+          <Text variant="body" tone="muted" align="center">
+            {item.description}
+          </Text>
+        </CopyBlock>
+      </SlideCard>
+    </SlidePage>
   );
 
   return (
@@ -132,6 +185,7 @@ export default function OnboardingScreen() {
           const newIndex = Math.round(event.nativeEvent.contentOffset.x / SLIDE_WIDTH);
           setActiveIndex(newIndex);
         }}
+        style={{ flexGrow: 0 }}
       />
       <PaginatorTrack>
         {slides.map((slide, index) => (
@@ -153,4 +207,3 @@ export default function OnboardingScreen() {
     </Screen>
   );
 }
-

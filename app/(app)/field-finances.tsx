@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import * as FileSystem from 'expo-file-system';
+import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useMemo, useState } from 'react';
@@ -22,7 +22,7 @@ import styled from '@/design-system/styled';
 import { farmApi, type FieldTransaction } from '@/services/farmApi';
 import { enqueueSyncAction } from '@/services/syncQueue';
 import { useAppStore } from '@/store/useAppStore';
-import { formatAreaM2, formatNaira } from '@/utils/formatters';
+import { formatAreaWithFt, formatNaira } from '@/utils/formatters';
 import { createClientUuid } from '@/utils/geoArea';
 
 const Screen = styled(SafeAreaView)`
@@ -50,7 +50,8 @@ const ModalContent = styled(Surface)`
   gap: 12px;
 `;
 
-const categories: FieldTransaction['category'][] = ['SEED', 'FERTILIZER', 'LABOR', 'HARVEST_SALE', 'OTHER'];
+const expenseCategories: FieldTransaction['category'][] = ['SEED', 'FERTILIZER', 'LABOR', 'OTHER'];
+const incomeCategories: FieldTransaction['category'][] = ['HARVEST_SALE', 'OTHER'];
 
 export default function FieldFinancesScreen() {
   const theme = useTheme();
@@ -61,11 +62,15 @@ export default function FieldFinancesScreen() {
   const { fieldId, fieldName } = useLocalSearchParams<{ fieldId: string; fieldName?: string }>();
 
   const [showModal, setShowModal] = useState(false);
+  const [showExportModal, setShowExportModal] = useState(false);
+  const [exportPath, setExportPath] = useState<string | null>(null);
+  const [exportFilename, setExportFilename] = useState('');
   const [type, setType] = useState<FieldTransaction['type']>('EXPENSE');
   const [category, setCategory] = useState<FieldTransaction['category']>('SEED');
   const [amount, setAmount] = useState('');
   const [quantity, setQuantity] = useState('');
-  const [unit, setUnit] = useState('');
+  const [saleItem, setSaleItem] = useState('');
+  const [categoryOther, setCategoryOther] = useState('');
   const [note, setNote] = useState('');
   const [occurredOn, setOccurredOn] = useState(new Date().toISOString().slice(0, 10));
 
@@ -84,6 +89,17 @@ export default function FieldFinancesScreen() {
   const invalidate = () => {
     queryClient.invalidateQueries({ queryKey: ['fieldEconomics', fieldId] });
     queryClient.invalidateQueries({ queryKey: ['fieldTransactions', fieldId] });
+    queryClient.invalidateQueries({ queryKey: ['farmOverview'] });
+  };
+
+  const resetForm = () => {
+    setAmount('');
+    setQuantity('');
+    setSaleItem('');
+    setCategoryOther('');
+    setNote('');
+    setType('EXPENSE');
+    setCategory('SEED');
   };
 
   const createMutation = useMutation({
@@ -94,7 +110,8 @@ export default function FieldFinancesScreen() {
         category,
         amount: parseFloat(amount) || 0,
         quantity: quantity ? parseFloat(quantity) : undefined,
-        unit: unit || undefined,
+        saleItem: type === 'INCOME' ? saleItem.trim() || undefined : undefined,
+        categoryOther: category === 'OTHER' ? categoryOther.trim() || undefined : undefined,
         occurredOn,
         note: note || undefined,
         clientUuid,
@@ -114,9 +131,7 @@ export default function FieldFinancesScreen() {
     onSuccess: () => {
       invalidate();
       setShowModal(false);
-      setAmount('');
-      setQuantity('');
-      setNote('');
+      resetForm();
       toast.success('Saved', 'Transaction added.');
     },
     onError: () => {
@@ -127,36 +142,54 @@ export default function FieldFinancesScreen() {
   });
 
   const exportMutation = useMutation({
-    mutationFn: (format: 'csv' | 'pdf') => farmApi.exportEconomics(token, String(fieldId), format),
+    mutationFn: () => farmApi.exportEconomics(token, String(fieldId)),
     onSuccess: async (res) => {
       try {
-        const baseDir = FileSystem.cacheDirectory ?? FileSystem.documentDirectory;
+        const baseDir = FileSystem.documentDirectory ?? FileSystem.cacheDirectory;
         if (!baseDir) throw new Error('No writable directory');
         const path = `${baseDir}${res.filename}`;
-        if (res.mimeType.includes('pdf') && res.content) {
-          await FileSystem.writeAsStringAsync(path, res.content, { encoding: 'base64' });
-        } else {
-          await FileSystem.writeAsStringAsync(path, res.content ?? '', { encoding: 'utf8' });
-        }
-        if (await Sharing.isAvailableAsync()) {
-          await Sharing.shareAsync(path, { mimeType: res.mimeType, dialogTitle: res.filename });
-        } else {
-          toast.success('Exported', res.filename);
-        }
+        await FileSystem.writeAsStringAsync(path, res.content ?? '', {
+          encoding: FileSystem.EncodingType.Base64,
+        });
+        setExportPath(path);
+        setExportFilename(res.filename);
+        setShowExportModal(true);
       } catch {
-        toast.error('Export failed', 'Could not share the file.');
+        toast.error('Export failed', 'Could not save the PDF.');
       }
     },
     onError: () => toast.error('Export failed', 'Server could not generate the file.'),
   });
 
+  const shareExport = async () => {
+    if (!exportPath) return;
+    try {
+      if (await Sharing.isAvailableAsync()) {
+        await Sharing.shareAsync(exportPath, {
+          mimeType: 'application/pdf',
+          dialogTitle: exportFilename,
+          UTI: 'com.adobe.pdf',
+        });
+      } else {
+        toast.success('Saved', exportFilename);
+      }
+    } catch {
+      toast.error('Share failed', 'Could not open the share sheet.');
+    }
+  };
+
   const economics = economicsQuery.data;
   const transactions = txQuery.data?.transactions ?? [];
 
   const categoryOptions = useMemo(
-    () => (type === 'INCOME' ? (['HARVEST_SALE', 'OTHER'] as const) : categories.filter((c) => c !== 'HARVEST_SALE')),
+    () => (type === 'INCOME' ? incomeCategories : expenseCategories),
     [type],
   );
+
+  const canSave =
+    Boolean(amount) &&
+    (category !== 'OTHER' || categoryOther.trim().length > 0) &&
+    (type !== 'INCOME' || saleItem.trim().length > 0 || category === 'OTHER');
 
   return (
     <Screen edges={['top', 'bottom']}>
@@ -210,22 +243,15 @@ export default function FieldFinancesScreen() {
               </View>
             </View>
             <Text variant="caption" tone="muted">
-              Field area: {formatAreaM2(economics?.areaM2)}
+              Field area: {formatAreaWithFt(economics?.areaM2)}
             </Text>
-            <View style={{ flexDirection: 'row', gap: 8 }}>
-              <Button
-                label="Export CSV"
-                variant="secondary"
-                onPress={() => exportMutation.mutate('csv')}
-                loading={exportMutation.isPending}
-              />
-              <Button
-                label="Export PDF"
-                variant="ghost"
-                onPress={() => exportMutation.mutate('pdf')}
-                loading={exportMutation.isPending}
-              />
-            </View>
+            <Button
+              label="Export PDF report"
+              variant="secondary"
+              onPress={() => exportMutation.mutate()}
+              loading={exportMutation.isPending}
+              fullWidth
+            />
           </Surface>
         )}
 
@@ -245,10 +271,19 @@ export default function FieldFinancesScreen() {
                 <Chip label={tx.type} tone={tx.type === 'INCOME' ? 'success' : 'warning'} />
                 <Text variant="headline">{formatNaira(tx.amount)}</Text>
               </View>
-              <Text variant="body">{tx.category.replace('_', ' ')}</Text>
+              <Text variant="body">
+                {tx.category === 'OTHER' && tx.categoryOther
+                  ? tx.categoryOther
+                  : tx.category.replace('_', ' ')}
+              </Text>
+              {tx.saleItem ? (
+                <Text variant="caption" tone="muted">
+                  Sold: {tx.saleItem}
+                </Text>
+              ) : null}
               <Text variant="caption" tone="muted">
                 {tx.occurredOn}
-                {tx.quantity != null ? ` · ${tx.quantity}${tx.unit ? ` ${tx.unit}` : ''}` : ''}
+                {tx.quantity != null ? ` · qty ${tx.quantity}` : ''}
               </Text>
               {tx.note ? <Text variant="caption">{tx.note}</Text> : null}
             </Surface>
@@ -260,36 +295,94 @@ export default function FieldFinancesScreen() {
         <ModalOverlay>
           <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
             <ModalContent>
-              <Text variant="headline">Add transaction</Text>
-              <View style={{ flexDirection: 'row', gap: 8 }}>
-                {(['EXPENSE', 'INCOME'] as const).map((t) => (
-                  <Chip key={t} label={t} tone={type === t ? 'success' : 'default'} onPress={() => setType(t)} />
-                ))}
-              </View>
-              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
-                {categoryOptions.map((c) => (
-                  <Chip
-                    key={c}
-                    label={c.replace('_', ' ')}
-                    tone={category === c ? 'info' : 'default'}
-                    onPress={() => setCategory(c)}
+              <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+                <View style={{ gap: 12 }}>
+                  <Text variant="headline">Add transaction</Text>
+                  <View style={{ flexDirection: 'row', gap: 8 }}>
+                    {(['EXPENSE', 'INCOME'] as const).map((t) => (
+                      <Chip
+                        key={t}
+                        label={t}
+                        tone={type === t ? 'success' : 'default'}
+                        onPress={() => {
+                          setType(t);
+                          setCategory(t === 'INCOME' ? 'HARVEST_SALE' : 'SEED');
+                          setSaleItem('');
+                          setCategoryOther('');
+                        }}
+                      />
+                    ))}
+                  </View>
+                  <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+                    {categoryOptions.map((c) => (
+                      <Chip
+                        key={c}
+                        label={c.replace('_', ' ')}
+                        tone={category === c ? 'info' : 'default'}
+                        onPress={() => setCategory(c)}
+                      />
+                    ))}
+                  </View>
+                  {type === 'INCOME' ? (
+                    <InputField
+                      label="What did you sell?"
+                      value={saleItem}
+                      onChangeText={setSaleItem}
+                      placeholder="e.g. Maize bags, tomatoes"
+                    />
+                  ) : null}
+                  {category === 'OTHER' ? (
+                    <InputField
+                      label="Describe this item"
+                      value={categoryOther}
+                      onChangeText={setCategoryOther}
+                      placeholder="e.g. Transport, pesticide, tools"
+                    />
+                  ) : null}
+                  <InputField label="Amount (₦)" value={amount} onChangeText={setAmount} keyboardType="decimal-pad" />
+                  <InputField label="Date (YYYY-MM-DD)" value={occurredOn} onChangeText={setOccurredOn} />
+                  <InputField
+                    label="Quantity (optional)"
+                    value={quantity}
+                    onChangeText={setQuantity}
+                    keyboardType="decimal-pad"
+                    placeholder="No unit needed"
                   />
-                ))}
-              </View>
-              <InputField label="Amount (₦)" value={amount} onChangeText={setAmount} keyboardType="decimal-pad" />
-              <InputField label="Date (YYYY-MM-DD)" value={occurredOn} onChangeText={setOccurredOn} />
-              <InputField label="Quantity (optional)" value={quantity} onChangeText={setQuantity} keyboardType="decimal-pad" />
-              <InputField label="Unit (kg, bags…)" value={unit} onChangeText={setUnit} />
-              <InputField label="Note" value={note} onChangeText={setNote} />
-              <Button
-                label="Save"
-                fullWidth
-                onPress={() => createMutation.mutate()}
-                loading={createMutation.isPending}
-              />
-              <Button label="Cancel" variant="ghost" fullWidth onPress={() => setShowModal(false)} />
+                  <InputField label="Note (optional)" value={note} onChangeText={setNote} />
+                  <Button
+                    label="Save"
+                    fullWidth
+                    onPress={() => createMutation.mutate()}
+                    loading={createMutation.isPending}
+                    disabled={!canSave}
+                  />
+                  <Button label="Cancel" variant="ghost" fullWidth onPress={() => setShowModal(false)} />
+                </View>
+              </ScrollView>
             </ModalContent>
           </KeyboardAvoidingView>
+        </ModalOverlay>
+      </Modal>
+
+      <Modal visible={showExportModal} animationType="fade" transparent onRequestClose={() => setShowExportModal(false)}>
+        <ModalOverlay style={{ justifyContent: 'center', padding: 24 }}>
+          <Surface rounded="xl" style={{ gap: 14, padding: 20 }}>
+            <Text variant="headline">PDF ready</Text>
+            <Text variant="body" tone="muted">
+              {exportFilename} is saved on this device. Share it, or keep the downloaded copy.
+            </Text>
+            <Button label="Share" onPress={shareExport} fullWidth />
+            <Button
+              label="Done — file downloaded"
+              variant="secondary"
+              onPress={() => {
+                setShowExportModal(false);
+                toast.success('Downloaded', exportFilename);
+              }}
+              fullWidth
+            />
+            <Button label="Close" variant="ghost" fullWidth onPress={() => setShowExportModal(false)} />
+          </Surface>
         </ModalOverlay>
       </Modal>
     </Screen>

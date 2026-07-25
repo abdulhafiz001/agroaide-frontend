@@ -119,6 +119,8 @@ export default function CalendarScreen() {
     enabled: Boolean(token),
   });
 
+  const [customWatchCrop, setCustomWatchCrop] = useState('');
+
   const WATCHABLE_CROPS = ['Maize', 'Cassava', 'Yam', 'Tomato', 'Rice', 'Sorghum', 'Millet', 'Cowpea'];
 
   const invalidate = () => {
@@ -293,6 +295,37 @@ export default function CalendarScreen() {
                 />
               );
             })}
+            {(watchesQuery.data?.watches ?? [])
+              .filter((w) => !WATCHABLE_CROPS.some((c) => c.toLowerCase() === w.crop.toLowerCase()))
+              .map((w) => (
+                <Chip
+                  key={w.id}
+                  label={`✓ ${w.crop}`}
+                  tone="success"
+                  onPress={() => unwatchMutation.mutate(w.id)}
+                />
+              ))}
+          </View>
+          <View style={{ flexDirection: 'row', gap: 8, alignItems: 'flex-end' }}>
+            <View style={{ flex: 1 }}>
+              <InputField
+                label="Add another crop"
+                value={customWatchCrop}
+                onChangeText={setCustomWatchCrop}
+                placeholder="e.g. Groundnut"
+              />
+            </View>
+            <Button
+              label="Watch"
+              onPress={() => {
+                const crop = customWatchCrop.trim();
+                if (!crop) return;
+                watchMutation.mutate(crop);
+                setCustomWatchCrop('');
+              }}
+              loading={watchMutation.isPending}
+              disabled={!customWatchCrop.trim()}
+            />
           </View>
         </Section>
 

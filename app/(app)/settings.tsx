@@ -17,6 +17,7 @@ import { ApiError } from '@/services/apiClient';
 import { LANGUAGE_OPTIONS, type SupportedLanguage } from '@/i18n/translations';
 import { useTranslation } from '@/i18n/useTranslation';
 import { clearAuthQueryCache } from '@/utils/queryClient';
+import { formatAreaWithFt, formatSquareSidesFt } from '@/utils/formatters';
 import { countPendingSyncActions, drainSyncQueue } from '@/services/syncEngine';
 
 import styled from '@/design-system/styled';
@@ -68,11 +69,28 @@ const notificationSettings: {
   key: keyof NotificationPreferences;
   label: string;
   description: string;
+  locked?: boolean;
 }[] = [
   { key: 'severeWeather', label: 'Critical weather alerts', description: 'Storms, heat waves & frost advisories.' },
   { key: 'marketMovers', label: 'Market intelligence', description: 'Commodity spikes & best selling days.' },
   { key: 'aiInsights', label: 'AI agronomy tips', description: 'Timely crop health nudges.' },
-] as const;
+  {
+    key: 'plantingWindowAlerts',
+    label: 'Planting window alerts',
+    description: 'Notify when it is time to plant watched crops in your zone.',
+  },
+  {
+    key: 'fieldBoundaryReminders',
+    label: 'Field boundary reminders',
+    description: 'Remind you to walk field boundaries within 24 hours of adding a field.',
+  },
+  {
+    key: 'diseaseOutbreak',
+    label: 'Disease outbreak alerts',
+    description: 'Community disease warnings near your farm. Always on for safety.',
+    locked: true,
+  },
+];
 
 const detailSegments = [
   { value: 'concise', label: 'Concise' },
@@ -343,6 +361,11 @@ export default function ProfileScreen() {
                 </Surface>
               )}
               <InputField label="Farm size (m²)" value={editFarmSize} onChangeText={setEditFarmSize} keyboardType="decimal-pad" />
+              {editFarmSize && formatSquareSidesFt(Number(editFarmSize)) ? (
+                <Text variant="caption" tone="muted">
+                  ≈ {formatSquareSidesFt(Number(editFarmSize))} (square plot estimate)
+                </Text>
+              ) : null}
               <InputField label="Crops (comma separated)" value={editCrops} onChangeText={setEditCrops} placeholder="Maize, Rice, Cassava" />
               <InputField label="Soil type" value={editSoilType} onChangeText={setEditSoilType} />
               <Button
@@ -376,7 +399,7 @@ export default function ProfileScreen() {
               </Row>
               <Row>
                 <Text variant="caption" tone="muted">Size</Text>
-                <Text variant="body">{profile?.farmSizeM2 || 0} m²</Text>
+                <Text variant="body">{formatAreaWithFt(profile?.farmSizeM2)}</Text>
               </Row>
               <Row>
                 <Text variant="caption" tone="muted">Crops</Text>
@@ -497,8 +520,10 @@ export default function ProfileScreen() {
                   <Text variant="caption" tone="muted">{setting.description}</Text>
                 </View>
                 <Switch
-                  value={notificationPreferences[setting.key]}
+                  value={setting.locked ? true : Boolean(notificationPreferences[setting.key])}
+                  disabled={setting.locked}
                   onValueChange={(v) => {
+                    if (setting.locked) return;
                     updateNotificationPreferences({ [setting.key]: v });
                     if (accessToken) {
                       authApi

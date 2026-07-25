@@ -21,6 +21,7 @@ import { Button, Chip, InputField, Surface, Text } from '@/design-system/compone
 import styled from '@/design-system/styled';
 import { farmApi, type FarmField, type JournalEntry } from '@/services/farmApi';
 import { useAppStore } from '@/store/useAppStore';
+import { formatAreaWithFt, formatNaira } from '@/utils/formatters';
 
 const Screen = styled(SafeAreaView)`
   flex: 1;
@@ -98,6 +99,7 @@ export default function FarmScreen() {
   const toast = useToast();
   const router = useRouter();
   const token = useAppStore((s) => s.accessToken) ?? '';
+  const profile = useAppStore((s) => s.farmerProfile);
   const queryClient = useQueryClient();
 
   const [showFieldModal, setShowFieldModal] = useState(false);
@@ -108,9 +110,12 @@ export default function FarmScreen() {
   const [fieldName, setFieldName] = useState('');
   const [fieldCrop, setFieldCrop] = useState('');
   const [fieldArea, setFieldArea] = useState('');
+  const [walkAfterSave, setWalkAfterSave] = useState(true);
   const [journalNote, setJournalNote] = useState('');
   const [journalType, setJournalType] = useState('observation');
   const [deleteTarget, setDeleteTarget] = useState<{ type: 'field' | 'journal'; id: string; name: string } | null>(null);
+
+  const profileCrops = profile?.crops?.filter(Boolean) ?? [];
 
   const { data, isLoading, refetch } = useQuery({
     queryKey: ['farmOverview'],
@@ -122,7 +127,17 @@ export default function FarmScreen() {
 
   const addFieldMutation = useMutation({
     mutationFn: () => farmApi.addField(token, { name: fieldName, crop: fieldCrop, areaM2: parseFloat(fieldArea) || 0 }),
-    onSuccess: () => { invalidate(); closeFieldModal(); },
+    onSuccess: (res) => {
+      invalidate();
+      closeFieldModal();
+      toast.success('Field added', walkAfterSave ? 'Walk the boundary when you are at the farm.' : 'You can walk the boundary later.');
+      if (walkAfterSave && res.field?.id) {
+        router.push({
+          pathname: '/walk-boundary',
+          params: { fieldId: res.field.id, fieldName: res.field.name },
+        });
+      }
+    },
     onError: () => toast.error('Error', 'Could not add field.'),
   });
 
@@ -166,13 +181,19 @@ export default function FarmScreen() {
 
   const openAddField = () => {
     setEditingField(null);
-    setFieldName(''); setFieldCrop(''); setFieldArea('');
+    setFieldName('');
+    setFieldCrop(profileCrops[0] ?? '');
+    setFieldArea('');
+    setWalkAfterSave(true);
     setShowFieldModal(true);
   };
 
   const openEditField = (f: FarmField) => {
     setEditingField(f);
-    setFieldName(f.name); setFieldCrop(f.crop); setFieldArea(String(f.area || ''));
+    setFieldName(f.name);
+    setFieldCrop(f.crop);
+    setFieldArea(String(f.area || ''));
+    setWalkAfterSave(false);
     setShowFieldModal(true);
   };
 
@@ -217,14 +238,35 @@ export default function FarmScreen() {
       <Container>
         <View style={{ paddingTop: 16, gap: 4 }}>
           <Text variant="display">{summary?.farmName || 'My Farm'}</Text>
-          <Text variant="body" tone="muted">{summary?.farmLocation} - {summary?.farmSizeM2} m²</Text>
+          <Text variant="body" tone="muted">
+            {summary?.farmLocation} · {formatAreaWithFt(summary?.farmSizeM2)}
+          </Text>
         </View>
 
         {mapData && (
           <Section>
-            <View style={{ height: 180, borderRadius: 16, overflow: 'hidden' }}>
-              <FarmMapView center={mapData.center} polygon={mapData.polygon} />
+            <View style={{ height: 220, borderRadius: 16, overflow: 'hidden' }}>
+              <FarmMapView
+                center={mapData.center}
+                polygon={mapData.polygon}
+                farmName={summary?.farmName}
+                fields={(mapData.fields ?? []).map((f) => ({
+                  fieldId: f.fieldId,
+                  name: f.name,
+                  crop: f.crop,
+                  polygon: f.polygon,
+                }))}
+              />
             </View>
+            {(mapData.fields?.length ?? 0) > 0 ? (
+              <Text variant="caption" tone="muted">
+                Crop fields with walked boundaries are labeled on the map inside your farm.
+              </Text>
+            ) : (
+              <Text variant="caption" tone="muted">
+                Walk a field boundary to plot it accurately on this map.
+              </Text>
+            )}
           </Section>
         )}
 
@@ -244,7 +286,9 @@ export default function FarmScreen() {
                 <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
                   <View style={{ flex: 1 }}>
                     <Text variant="headline">{field.name}</Text>
-                    <Text variant="caption" tone="muted">{field.crop} - {field.area} m²</Text>
+                    <Text variant="caption" tone="muted">
+                      {field.crop} · {formatAreaWithFt(field.area)}
+                    </Text>
                   </View>
                   <View style={{ flexDirection: 'row', gap: 10 }}>
                     <TouchableOpacity
@@ -261,6 +305,19 @@ export default function FarmScreen() {
                     </TouchableOpacity>
                   </View>
                 </View>
+                {(field.totalExpense != null || field.totalIncome != null) && (
+                  <View style={{ flexDirection: 'row', gap: 12, flexWrap: 'wrap' }}>
+                    <Text variant="caption" tone="muted">
+                      Expenses {formatNaira(field.totalExpense ?? 0)}
+                    </Text>
+                    <Text variant="caption" tone="muted">
+                      Income {formatNaira(field.totalIncome ?? 0)}
+                    </Text>
+                    <Text variant="caption">
+                      Net {formatNaira(field.netProfit ?? 0)}
+                    </Text>
+                  </View>
+                )}
                 <View style={{ flexDirection: 'row', gap: 8, flexWrap: 'wrap' }}>
                   <Chip
                     label="Walk boundary"
@@ -282,7 +339,9 @@ export default function FarmScreen() {
                       })
                     }
                   />
-                  {field.hasMeasuredBoundary ? <Chip label="Measured" tone="success" /> : null}
+                  {field.hasMeasuredBoundary ? <Chip label="Measured" tone="success" /> : (
+                    <Chip label="Boundary pending" tone="warning" />
+                  )}
                   <Chip label={`Health: ${field.health}%`} tone={field.health >= 70 ? 'success' : 'warning'} />
                   <Chip label={`Moisture: ${field.moisture}%`} tone="info" />
                   {field.daysSincePlanting != null && (
@@ -349,8 +408,48 @@ export default function FarmScreen() {
                 <View style={{ gap: 16 }}>
                   <Text variant="headline">{editingField ? 'Edit field' : 'Add new field'}</Text>
                   <InputField label="Field name" value={fieldName} onChangeText={setFieldName} placeholder="e.g. North Block" />
-                  <InputField label="Crop" value={fieldCrop} onChangeText={setFieldCrop} placeholder="e.g. Maize" />
-                  <InputField label="Area (m²)" value={fieldArea} onChangeText={setFieldArea} keyboardType="decimal-pad" />
+                  <Text variant="caption" tone="muted">Crop planted on this field</Text>
+                  {profileCrops.length > 0 ? (
+                    <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+                      {profileCrops.map((crop) => (
+                        <Chip
+                          key={crop}
+                          label={crop}
+                          tone={fieldCrop === crop ? 'success' : 'default'}
+                          onPress={() => setFieldCrop(crop)}
+                        />
+                      ))}
+                    </View>
+                  ) : (
+                    <InputField
+                      label="Crop"
+                      value={fieldCrop}
+                      onChangeText={setFieldCrop}
+                      placeholder="Add crops in Settings first"
+                    />
+                  )}
+                  <InputField
+                    label="Area estimate (m²) — optional"
+                    value={fieldArea}
+                    onChangeText={setFieldArea}
+                    keyboardType="decimal-pad"
+                    placeholder="Leave blank and walk the boundary"
+                  />
+                  {fieldArea ? (
+                    <Text variant="caption" tone="muted">{formatAreaWithFt(parseFloat(fieldArea) || 0)}</Text>
+                  ) : null}
+                  {!editingField ? (
+                    <View style={{ gap: 8 }}>
+                      <Text variant="caption" tone="muted">
+                        Accurate size comes from walking the field perimeter. You can do it now or later — we will remind you after 24 hours.
+                      </Text>
+                      <Chip
+                        label={walkAfterSave ? '✓ Walk boundary after save' : 'Skip walk for now'}
+                        tone={walkAfterSave ? 'info' : 'default'}
+                        onPress={() => setWalkAfterSave((v) => !v)}
+                      />
+                    </View>
+                  ) : null}
                   <View style={{ flexDirection: 'row', gap: 12 }}>
                     <Button label="Cancel" variant="ghost" onPress={closeFieldModal} style={{ flex: 1 }} />
                     <Button

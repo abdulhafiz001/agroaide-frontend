@@ -17,6 +17,9 @@ export type FarmField = {
   plantedAt: string | null;
   boundaryGeojson?: GeoJSON.Polygon | null;
   hasMeasuredBoundary?: boolean;
+  totalExpense?: number;
+  totalIncome?: number;
+  netProfit?: number;
 };
 
 export type JournalEntry = {
@@ -36,6 +39,7 @@ export type FarmOverviewResponse = {
     fields?: Array<{
       fieldId: string;
       name: string;
+      crop?: string;
       polygon: MapCoordinate[];
       geojson?: GeoJSON.Polygon;
     }>;
@@ -55,6 +59,8 @@ export type FieldTransaction = {
   amount: number;
   quantity: number | null;
   unit: string | null;
+  saleItem?: string | null;
+  categoryOther?: string | null;
   occurredOn: string;
   note: string | null;
   clientUuid?: string | null;
@@ -165,6 +171,8 @@ export const farmApi = {
       amount: number;
       quantity?: number;
       unit?: string;
+      saleItem?: string;
+      categoryOther?: string;
       occurredOn: string;
       note?: string;
       clientUuid?: string;
@@ -210,9 +218,9 @@ export const farmApi = {
     }>('/farm/economics/summary', { token });
   },
 
-  exportEconomics(token: string, fieldId: string, format: 'csv' | 'pdf') {
+  exportEconomics(token: string, fieldId: string) {
     return apiRequest<{ downloadUrl?: string; content?: string; filename: string; mimeType: string }>(
-      `/farm/fields/${fieldId}/economics/export?format=${format}`,
+      `/farm/fields/${fieldId}/economics/export?format=pdf`,
       { token },
     );
   },

@@ -24,6 +24,7 @@ import { ApiError } from '@/services/apiClient';
 import { authApi } from '@/services/authApi';
 import { useAppStore } from '@/store/useAppStore';
 import type { ExperienceLevel } from '@/types/farmer';
+import { formatSquareSidesFt } from '@/utils/formatters';
 
 const LOCATIONIQ_KEY = process.env.EXPO_PUBLIC_LOCATIONIQ_KEY || '';
 
@@ -281,6 +282,11 @@ export default function CompleteFarmScreen() {
                   onChangeText={setFarmSizeM2}
                   keyboardType="decimal-pad"
                 />
+                {farmSizeM2 && formatSquareSidesFt(Number(farmSizeM2)) ? (
+                  <Text variant="caption" tone="muted">
+                    ≈ {formatSquareSidesFt(Number(farmSizeM2))} (square plot estimate)
+                  </Text>
+                ) : null}
                 <InputField
                   label="Soil type"
                   value={soilType}

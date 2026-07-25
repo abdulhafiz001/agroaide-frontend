@@ -23,6 +23,9 @@ export interface FarmerProfile {
     marketMovers: boolean;
     aiInsights: boolean;
     communityMentions: boolean;
+    plantingWindowAlerts?: boolean;
+    fieldBoundaryReminders?: boolean;
+    diseaseOutbreak?: boolean;
   };
 }
 

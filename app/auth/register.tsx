@@ -16,7 +16,6 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { LocationMapPreview } from '@/components/LocationMapPreview';
 import type { LeafletMapHandle } from '@/components/LeafletMap';
-import type { LeafletMapHandle } from '@/components/LeafletMap';
 import styled from '@/design-system/styled';
 import { useTheme } from 'styled-components/native';
 
@@ -27,6 +26,7 @@ import { authApi } from '@/services/authApi';
 import { useAppStore } from '@/store/useAppStore';
 import type { ExperienceLevel } from '@/types/farmer';
 import { isFarmProfileComplete } from '@/utils/farmProfile';
+import { formatSquareSidesFt } from '@/utils/formatters';
 import { clearAuthQueryCache } from '@/utils/queryClient';
 
 const LOCATIONIQ_KEY = process.env.EXPO_PUBLIC_LOCATIONIQ_KEY || '';
@@ -355,6 +355,11 @@ export default function RegisterScreen() {
         onChangeText={(t) => updateForm('farmSizeM2', t)}
         keyboardType="decimal-pad"
       />
+      {form.farmSizeM2 && formatSquareSidesFt(Number(form.farmSizeM2)) ? (
+        <Text variant="caption" tone="muted">
+          ≈ {formatSquareSidesFt(Number(form.farmSizeM2))} (square plot estimate)
+        </Text>
+      ) : null}
       <InputField label="Soil type" value={form.soilType} onChangeText={(t) => updateForm('soilType', t)} placeholder="e.g. Loamy, Clay, Sandy" />
       <Text variant="caption" tone="muted">
         Irrigation method

@@ -24,6 +24,7 @@ export type LeafletPolygon = {
   coordinates: { latitude: number; longitude: number }[];
   color?: string;
   fillOpacity?: number;
+  label?: string;
 };
 
 export type LeafletMapHandle = {
@@ -76,6 +77,7 @@ function buildHtml({
       coords: p.coordinates.map((c) => [c.latitude, c.longitude]),
       color: p.color ?? '#57b346',
       fillOpacity: p.fillOpacity ?? 0.2,
+      label: p.label ?? '',
     })),
   );
 
@@ -89,6 +91,16 @@ function buildHtml({
   <style>
     html, body, #map { margin: 0; padding: 0; height: 100%; width: 100%; background: #e8f5e9; }
     .leaflet-control-attribution { font-size: 10px; }
+    .field-label {
+      background: rgba(255,255,255,0.92);
+      border: 1px solid #57b346;
+      border-radius: 8px;
+      padding: 2px 8px;
+      font: 600 11px/1.3 system-ui, sans-serif;
+      color: #1a3d12;
+      box-shadow: 0 1px 4px rgba(0,0,0,.2);
+      white-space: nowrap;
+    }
   </style>
 </head>
 <body>
@@ -140,13 +152,28 @@ function buildHtml({
 
     var polygons = ${polygonsJson};
     polygons.forEach(function (p) {
-      L.polygon(p.coords, {
+      var poly = L.polygon(p.coords, {
         color: p.color,
         fillColor: p.color,
         fillOpacity: p.fillOpacity,
         weight: 2
       }).addTo(map);
+      if (p.label) {
+        poly.bindTooltip(p.label, {
+          permanent: true,
+          direction: 'center',
+          className: 'field-label',
+          opacity: 1
+        });
+      }
     });
+
+    if (polygons.length > 0) {
+      var group = L.featureGroup(polygons.map(function (p) {
+        return L.polygon(p.coords);
+      }));
+      try { map.fitBounds(group.getBounds().pad(0.2)); } catch (e) {}
+    }
 
     setTimeout(function () { map.invalidateSize(); }, 120);
 
