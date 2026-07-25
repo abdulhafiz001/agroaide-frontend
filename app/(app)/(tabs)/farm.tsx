@@ -19,6 +19,7 @@ import { ConfirmModal } from '@/components/ConfirmModal';
 import { useToast } from '@/components/Toast';
 import { Button, Chip, InputField, Surface, Text } from '@/design-system/components';
 import styled from '@/design-system/styled';
+import { useTranslation } from '@/i18n/useTranslation';
 import { farmApi, type FarmField, type JournalEntry } from '@/services/farmApi';
 import { useAppStore } from '@/store/useAppStore';
 import { formatAreaWithFt, formatNaira } from '@/utils/formatters';
@@ -97,6 +98,7 @@ const ScanFAB = styled(TouchableOpacity)`
 export default function FarmScreen() {
   const theme = useTheme();
   const toast = useToast();
+  const { t } = useTranslation();
   const router = useRouter();
   const token = useAppStore((s) => s.accessToken) ?? '';
   const profile = useAppStore((s) => s.farmerProfile);
@@ -131,7 +133,7 @@ export default function FarmScreen() {
     onSuccess: (res) => {
       invalidate();
       closeFieldModal();
-      toast.success('Field added', walkAfterSave ? 'Walk the boundary when you are at the farm.' : 'You can walk the boundary later.');
+      toast.success(t('fieldAdded'), walkAfterSave ? t('walkBoundaryWhenAtFarm') : t('skipWalkForNow'));
       if (walkAfterSave && res.field?.id) {
         router.push({
           pathname: '/walk-boundary',
@@ -139,7 +141,7 @@ export default function FarmScreen() {
         });
       }
     },
-    onError: () => toast.error('Error', 'Could not add field.'),
+    onError: () => toast.error(t('errorGeneric'), t('couldNotAddField')),
   });
 
   const updateFieldMutation = useMutation({
@@ -223,7 +225,7 @@ export default function FarmScreen() {
       <Screen>
         <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
           <ActivityIndicator size="large" color={theme.colors.primary} />
-          <Text tone="muted" style={{ marginTop: 12 }}>Loading farm data...</Text>
+          <Text tone="muted" style={{ marginTop: 12 }}>{t('loadingFarmData')}</Text>
         </View>
       </Screen>
     );
@@ -244,7 +246,7 @@ export default function FarmScreen() {
             onPress={() => mapRef.current?.zoomToFarm()}
             hitSlop={{ top: 8, bottom: 8, left: 4, right: 4 }}
           >
-            <Text variant="display">{summary?.farmName || 'My Farm'}</Text>
+            <Text variant="display">{summary?.farmName || t('myFarm')}</Text>
           </TouchableOpacity>
           <Text variant="body" tone="muted">
             {summary?.farmLocation} · {formatAreaWithFt(summary?.farmSizeM2)}
@@ -281,13 +283,13 @@ export default function FarmScreen() {
 
         <Section>
           <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-            <Text variant="headline">Farm fields ({fields.length})</Text>
-            <Chip label="+ Add field" tone="success" onPress={openAddField} />
+            <Text variant="headline">{t('farmFields')} ({fields.length})</Text>
+            <Chip label={`+ ${t('addField')}`} tone="success" onPress={openAddField} />
           </View>
           {fields.length === 0 ? (
             <Surface variant="muted" style={{ padding: 24, alignItems: 'center', gap: 8, borderRadius: 16 }}>
               <Ionicons name="leaf-outline" size={32} color={theme.colors.textSecondary} />
-              <Text tone="muted">No fields yet. Add your first field to get started.</Text>
+              <Text tone="muted">{t('noFieldsYet')}</Text>
             </Surface>
           ) : (
             fields.map((field) => (
@@ -349,7 +351,7 @@ export default function FarmScreen() {
                 )}
                 <View style={{ flexDirection: 'row', gap: 8, flexWrap: 'wrap' }}>
                   <Chip
-                    label="Details"
+                    label={t('details')}
                     tone="info"
                     onPress={() =>
                       router.push({
@@ -359,7 +361,7 @@ export default function FarmScreen() {
                     }
                   />
                   <Chip
-                    label="Walk boundary"
+                    label={t('walkBoundary')}
                     tone="info"
                     onPress={() =>
                       router.push({
@@ -369,7 +371,7 @@ export default function FarmScreen() {
                     }
                   />
                   <Chip
-                    label="Finances"
+                    label={t('finances')}
                     tone="success"
                     onPress={() =>
                       router.push({
@@ -378,13 +380,13 @@ export default function FarmScreen() {
                       })
                     }
                   />
-                  {field.hasMeasuredBoundary ? <Chip label="Measured" tone="success" /> : (
-                    <Chip label="Boundary pending" tone="warning" />
+                  {field.hasMeasuredBoundary ? <Chip label={t('measured')} tone="success" /> : (
+                    <Chip label={t('boundaryPending')} tone="warning" />
                   )}
-                  <Chip label={`Health: ${field.health}%`} tone={field.health >= 70 ? 'success' : 'warning'} />
-                  <Chip label={`Moisture: ${field.moisture}%`} tone="info" />
+                  <Chip label={`${t('healthLabel')}: ${field.health}%`} tone={field.health >= 70 ? 'success' : 'warning'} />
+                  <Chip label={`${t('moistureLabel')}: ${field.moisture}%`} tone="info" />
                   {field.daysSincePlanting != null && (
-                    <Chip label={`Day ${field.daysSincePlanting}`} tone="default" />
+                    <Chip label={`${t('dayLabel')} ${field.daysSincePlanting}`} tone="default" />
                   )}
                   <Chip label={field.status} tone={field.status === 'active' ? 'success' : 'default'} />
                 </View>
@@ -395,13 +397,13 @@ export default function FarmScreen() {
 
         <Section>
           <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-            <Text variant="headline">Field journal ({journal.length})</Text>
-            <Chip label="+ Add note" tone="info" onPress={openAddJournal} />
+            <Text variant="headline">{t('fieldJournal')} ({journal.length})</Text>
+            <Chip label={`+ ${t('addNote')}`} tone="info" onPress={openAddJournal} />
           </View>
           {journal.length === 0 ? (
             <Surface variant="muted" style={{ padding: 24, alignItems: 'center', gap: 8, borderRadius: 16 }}>
               <Ionicons name="document-text-outline" size={32} color={theme.colors.textSecondary} />
-              <Text tone="muted">No journal entries yet.</Text>
+              <Text tone="muted">{t('noJournalEntries')}</Text>
             </Surface>
           ) : (
             journal.map((entry) => (
@@ -418,7 +420,7 @@ export default function FarmScreen() {
                   </View>
                 </View>
                 <Text variant="body">{entry.note}</Text>
-                {entry.fieldName && <Text variant="caption" tone="muted">Field: {entry.fieldName}</Text>}
+                {entry.fieldName && <Text variant="caption" tone="muted">{t('fieldLabel')}: {entry.fieldName}</Text>}
                 <Text variant="caption" tone="muted">{new Date(entry.date).toLocaleDateString()}</Text>
               </Surface>
             ))
@@ -445,9 +447,9 @@ export default function FarmScreen() {
             <ModalContent>
               <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
                 <View style={{ gap: 16 }}>
-                  <Text variant="headline">{editingField ? 'Edit field' : 'Add new field'}</Text>
-                  <InputField label="Field name" value={fieldName} onChangeText={setFieldName} placeholder="e.g. North Block" />
-                  <Text variant="caption" tone="muted">Crop planted on this field</Text>
+                  <Text variant="headline">{editingField ? t('editField') : t('addNewField')}</Text>
+                  <InputField label={t('fieldName')} value={fieldName} onChangeText={setFieldName} placeholder="e.g. North Block" />
+                  <Text variant="caption" tone="muted">{t('cropPlantedOnField')}</Text>
                   {profileCrops.length > 0 ? (
                     <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
                       {profileCrops.map((crop) => (
@@ -461,21 +463,21 @@ export default function FarmScreen() {
                     </View>
                   ) : (
                     <InputField
-                      label="Crop"
+                      label={t('cropLabel')}
                       value={fieldCrop}
                       onChangeText={setFieldCrop}
-                      placeholder="Add crops in Settings first"
+                      placeholder={t('addCropsInSettingsFirst')}
                     />
                   )}
                   <InputField
-                    label="Area estimate (m²) — optional"
+                    label={t('areaEstimateOptional')}
                     value={fieldArea}
                     onChangeText={setFieldArea}
                     keyboardType="decimal-pad"
-                    placeholder="Leave blank and walk the boundary"
+                    placeholder={t('leaveBlankWalkBoundary')}
                   />
                   {fieldArea ? (
-                    <Text variant="caption" tone="muted">{formatAreaWithFt(parseFloat(fieldArea) || 0)}</Text>
+                    <Text variant="caption" tone="muted">{formatAreaWithFt(parseFloat(fieldArea) || 0)} — {t('estimatedUntilMeasured')}</Text>
                   ) : null}
                   {!editingField ? (
                     <View style={{ gap: 8 }}>
@@ -483,16 +485,16 @@ export default function FarmScreen() {
                         Accurate size comes from walking the field perimeter. You can do it now or later — we will remind you after 24 hours.
                       </Text>
                       <Chip
-                        label={walkAfterSave ? '✓ Walk boundary after save' : 'Skip walk for now'}
+                        label={walkAfterSave ? `✓ ${t('walkBoundaryAfterSave')}` : t('skipWalkForNow')}
                         tone={walkAfterSave ? 'info' : 'default'}
                         onPress={() => setWalkAfterSave((v) => !v)}
                       />
                     </View>
                   ) : null}
                   <View style={{ flexDirection: 'row', gap: 12 }}>
-                    <Button label="Cancel" variant="ghost" onPress={closeFieldModal} style={{ flex: 1 }} />
+                    <Button label={t('cancel')} variant="ghost" onPress={closeFieldModal} style={{ flex: 1 }} />
                     <Button
-                      label={editingField ? 'Update' : 'Add field'}
+                      label={editingField ? t('update') : t('addField')}
                       onPress={() => (editingField ? updateFieldMutation.mutate() : addFieldMutation.mutate())}
                       loading={addFieldMutation.isPending || updateFieldMutation.isPending}
                       disabled={!fieldName || !fieldCrop}
@@ -516,25 +518,25 @@ export default function FarmScreen() {
             <ModalContent>
               <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
                 <View style={{ gap: 16 }}>
-                  <Text variant="headline">{editingEntry ? 'Edit journal entry' : 'Add journal entry'}</Text>
+                  <Text variant="headline">{editingEntry ? t('editJournalEntry') : t('addJournalEntry')}</Text>
                   <InputField
-                    label="Note"
+                    label={t('noteLabel')}
                     value={journalNote}
                     onChangeText={setJournalNote}
-                    placeholder="What did you observe or do?"
+                    placeholder={t('whatDidYouObserve')}
                     multiline
                     numberOfLines={3}
                   />
-                  <Text variant="caption" tone="muted">Type</Text>
+                  <Text variant="caption" tone="muted">{t('typeLabel')}</Text>
                   <View style={{ flexDirection: 'row', gap: 8, flexWrap: 'wrap' }}>
-                    {['observation', 'action', 'issue', 'harvest'].map((t) => (
-                      <Chip key={t} label={t} tone={journalType === t ? 'success' : 'default'} onPress={() => setJournalType(t)} />
+                    {['observation', 'action', 'issue', 'harvest'].map((type) => (
+                      <Chip key={type} label={type} tone={journalType === type ? 'success' : 'default'} onPress={() => setJournalType(type)} />
                     ))}
                   </View>
                   <View style={{ flexDirection: 'row', gap: 12 }}>
-                    <Button label="Cancel" variant="ghost" onPress={closeJournalModal} style={{ flex: 1 }} />
+                    <Button label={t('cancel')} variant="ghost" onPress={closeJournalModal} style={{ flex: 1 }} />
                     <Button
-                      label={editingEntry ? 'Update' : 'Add entry'}
+                      label={editingEntry ? t('update') : t('addJournalEntry')}
                       onPress={() => (editingEntry ? updateJournalMutation.mutate() : addJournalMutation.mutate())}
                       loading={addJournalMutation.isPending || updateJournalMutation.isPending}
                       disabled={!journalNote}

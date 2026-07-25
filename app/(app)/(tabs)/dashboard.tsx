@@ -185,7 +185,7 @@ export default function Dashboard() {
       setNewFieldName('');
       setNewFieldCrop('');
       setNewFieldArea('');
-      toast.success('Field added', walkAfterSave ? 'Walk the boundary when you are at the farm.' : 'You can walk the boundary later.');
+      toast.success(t('fieldAdded'), walkAfterSave ? t('walkBoundaryWhenAtFarm') : 'You can walk the boundary later.');
       if (walkAfterSave && res.field?.id) {
         router.push({
           pathname: '/walk-boundary',
@@ -193,7 +193,7 @@ export default function Dashboard() {
         });
       }
     },
-    onError: () => toast.error('Error', 'Could not add farm field.'),
+    onError: () => toast.error(t('errorGeneric'), t('couldNotAddField')),
   });
 
   if (loading && !payload) {
@@ -201,7 +201,7 @@ export default function Dashboard() {
       <Screen>
         <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', gap: 12 }}>
           <ActivityIndicator size="large" color={theme.colors.primary} />
-          <Text tone="muted">Gathering farm intelligence...</Text>
+          <Text tone="muted">{t('gatheringFarmIntelligence')}</Text>
         </View>
       </Screen>
     );
@@ -214,12 +214,12 @@ export default function Dashboard() {
     return (
       <Screen>
         <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', gap: 12, padding: 24 }}>
-          <Text variant="headline">Couldn't load dashboard</Text>
+          <Text variant="headline">{t('couldNotLoadDashboard')}</Text>
           <Text tone="muted" align="center">{message}</Text>
-          <Button label="Retry" onPress={() => refetch()} fullWidth />
+          <Button label={t('retry')} onPress={() => refetch()} fullWidth />
           {statusCode === 401 ? (
             <Button
-              label="Sign in again"
+              label={t('signInAgain')}
               variant="secondary"
               onPress={() => {
                 clearAuthQueryCache();
@@ -238,8 +238,8 @@ export default function Dashboard() {
     return (
       <Screen>
         <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', gap: 12, padding: 24 }}>
-          <Text variant="headline">No dashboard data</Text>
-          <Button label="Reload" onPress={() => refetch()} fullWidth />
+          <Text variant="headline">{t('noDashboardData')}</Text>
+          <Button label={t('reload')} onPress={() => refetch()} fullWidth />
         </View>
       </Screen>
     );
@@ -261,17 +261,17 @@ export default function Dashboard() {
             <Text variant="caption" tone="muted">{getGreeting()}</Text>
             <Text variant="display">{user.name}</Text>
             <Text variant="body" tone="muted">
-              Finish setting up your farm to unlock local weather, soil conditions, disease alerts, and AI insights.
+              {t('finishFarmSetup')}
             </Text>
           </Header>
           <Surface rounded="xl" style={{ marginTop: 16, gap: 16, padding: 24 }}>
             <Sprout size={40} color={theme.colors.primary} />
-            <Text variant="headline">Complete your farm profile</Text>
+            <Text variant="headline">{t('completeFarmProfile')}</Text>
             <Text variant="body" tone="muted">
               Add your crops, soil, and farm location so AgroAide can warn you about nearby crop diseases within 5km and give advice for your fields.
             </Text>
             <Button
-              label="Complete farm details"
+              label={t('completeFarmDetails')}
               onPress={() => router.push('/auth/complete-farm')}
               fullWidth
             />
@@ -316,7 +316,7 @@ export default function Dashboard() {
         {weatherAlert ? (
           <LinearGradient colors={weatherAlert.gradient} style={{ borderRadius: 28, padding: 24, marginTop: 8 }}>
             <Badge tone="warning">
-              <Text variant="caption" tone="inverse">{weatherAlert.severity} alert</Text>
+              <Text variant="caption" tone="inverse">{weatherAlert.severity} {t('alertLabel')}</Text>
             </Badge>
             <View style={{ marginTop: 12, gap: 8 }}>
               <Text variant="title" tone="inverse">{weatherAlert.title}</Text>
@@ -364,7 +364,7 @@ export default function Dashboard() {
           </View>
           <TouchableOpacity onPress={() => router.push('/(app)/(tabs)/calendar')} activeOpacity={0.8}>
           <Surface rounded="xl" style={{ flexDirection: 'row', gap: 20, alignItems: 'center' }}>
-            <ProgressDonut value={priorityTask.progress} size={110} color="#db9534" label={`${priorityTask.progress}%`} subLabel="Complete" />
+            <ProgressDonut value={priorityTask.progress} size={110} color="#db9534" label={`${priorityTask.progress}%`} subLabel={t('completeLabel')} />
             <View style={{ flex: 1, gap: 6 }}>
               <Text variant="headline">{priorityTask.title}</Text>
               <Text variant="body" tone="muted">{priorityTask.estimatedImpact}</Text>
@@ -393,16 +393,16 @@ export default function Dashboard() {
                 }}
               />
               <TouchableOpacity onPress={() => router.push('/(app)/(tabs)/farm')}>
-                <Text variant="caption" tone="accent">View all</Text>
+                <Text variant="caption" tone="accent">{t('viewAll')}</Text>
               </TouchableOpacity>
             </View>
           </View>
           {(!farmData?.fields || farmData.fields.length === 0) ? (
             <Surface rounded="xl" style={{ padding: 24, alignItems: 'center', gap: 8 }}>
               <Sprout size={32} color={theme.colors.textSecondary} />
-              <Text tone="muted">No farm fields yet.</Text>
+              <Text tone="muted">{t('noFarmFieldsYet')}</Text>
               <Button
-                label="Add your first field"
+                label={t('addYourFirstField')}
                 variant="secondary"
                 onPress={() => {
                   setNewFieldCrop(profileCrops[0] ?? '');
@@ -475,7 +475,7 @@ export default function Dashboard() {
                     minHeight: 140,
                   }}>
                   <Plus size={28} color={theme.colors.primary} />
-                  <Text variant="caption" tone="accent">Add farm</Text>
+                  <Text variant="caption" tone="accent">{t('addFarm')}</Text>
                 </Surface>
               </TouchableOpacity>
             </ScrollView>
@@ -487,14 +487,14 @@ export default function Dashboard() {
           <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
             <Text variant="headline">{t('marketPrices')}</Text>
             <TouchableOpacity onPress={() => router.push('/(app)/market')}>
-              <Text variant="caption" tone="accent">View all</Text>
+              <Text variant="caption" tone="accent">{t('viewAll')}</Text>
             </TouchableOpacity>
           </View>
           {(!marketData?.marketPrices || marketData.marketPrices.length === 0) ? (
             <Surface rounded="xl" style={{ padding: 24, alignItems: 'center', gap: 8 }}>
-              <Text tone="muted">Add crops to your profile to see price estimates.</Text>
+              <Text tone="muted">{t('addCropsForPrices')}</Text>
               <TouchableOpacity onPress={() => router.push('/(app)/market')}>
-                <Text variant="caption" tone="accent">Open Market</Text>
+                <Text variant="caption" tone="accent">{t('openMarket')}</Text>
               </TouchableOpacity>
             </Surface>
           ) : (
@@ -529,7 +529,7 @@ export default function Dashboard() {
                         fontWeight: '600',
                         fontSize: 11,
                       }}>
-                        {item.trend === 'up' ? '↑ Rising' : item.trend === 'down' ? '↓ Falling' : '→ Stable'}
+                        {item.trend === 'up' ? `↑ ${t('rising')}` : item.trend === 'down' ? `↓ ${t('falling')}` : `→ ${t('stable')}`}
                       </Text>
                     </View>
                   </Surface>
@@ -551,7 +551,7 @@ export default function Dashboard() {
                     minHeight: 120,
                   }}>
                   <ArrowRight size={24} color={theme.colors.primary} />
-                  <Text variant="caption" tone="accent">View all</Text>
+                  <Text variant="caption" tone="accent">{t('viewAll')}</Text>
                 </Surface>
               </TouchableOpacity>
             </ScrollView>
@@ -564,7 +564,7 @@ export default function Dashboard() {
             <MoreHorizontal size={20} color={theme.colors.textSecondary} />
           </View>
           <Text variant="caption" tone="muted" style={{ marginBottom: 4 }}>
-            From Open-Meteo at your farm GPS (moisture/temperature proxies) — not a lab NPK/pH soil test.
+            {t('soilOpenMeteoNote')}
           </Text>
           <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 12 }}>
             {soilHealth.map((metric: any) => {
@@ -647,7 +647,7 @@ export default function Dashboard() {
                 <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
                   <Text variant="headline" style={{ flex: 1 }}>{tip.title}</Text>
                   <Badge tone="success">
-                    <Text variant="caption" tone="accent">Today</Text>
+                    <Text variant="caption" tone="accent">{t('today')}</Text>
                   </Badge>
                 </View>
                 <Text tone="muted">{tip.description}</Text>
@@ -655,7 +655,7 @@ export default function Dashboard() {
                   style={{ flexDirection: 'row', alignItems: 'center', gap: 4, paddingTop: 4 }}
                   onPress={() => router.push('/(app)/(tabs)/advisor')}
                 >
-                  <Text variant="caption" tone="accent">Ask AI more</Text>
+                  <Text variant="caption" tone="accent">{t('askAiMore')}</Text>
                   <ArrowRight size={14} color={theme.colors.primary} />
                 </TouchableOpacity>
               </Surface>
@@ -672,9 +672,9 @@ export default function Dashboard() {
             <ModalContent>
               <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
                 <View style={{ gap: 16 }}>
-                  <Text variant="headline">Add new farm field</Text>
-                  <InputField label="Field name" value={newFieldName} onChangeText={setNewFieldName} placeholder="e.g. North Block" />
-                  <Text variant="caption" tone="muted">Crop planted on this field</Text>
+                  <Text variant="headline">{t('addNewFarmField')}</Text>
+                  <InputField label={t('fieldName')} value={newFieldName} onChangeText={setNewFieldName} placeholder="e.g. North Block" />
+                  <Text variant="caption" tone="muted">{t('cropPlantedOnField')}</Text>
                   {profileCrops.length > 0 ? (
                     <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
                       {profileCrops.map((crop) => (
@@ -688,31 +688,31 @@ export default function Dashboard() {
                     </View>
                   ) : (
                     <InputField
-                      label="Crop"
+                      label={t('cropLabel')}
                       value={newFieldCrop}
                       onChangeText={setNewFieldCrop}
-                      placeholder="Add crops in Settings first"
+                      placeholder={t('addCropsInSettingsFirst')}
                     />
                   )}
                   <InputField
-                    label="Area estimate (m²) — optional"
+                    label={t('areaEstimateOptional')}
                     value={newFieldArea}
                     onChangeText={setNewFieldArea}
                     keyboardType="decimal-pad"
-                    placeholder="Leave blank and walk the boundary"
+                    placeholder={t('leaveBlankWalkBoundary')}
                   />
                   {newFieldArea ? (
                     <Text variant="caption" tone="muted">{formatAreaWithFt(parseFloat(newFieldArea) || 0)}</Text>
                   ) : null}
                   <Chip
-                    label={walkAfterSave ? '✓ Walk boundary after save' : 'Skip walk for now'}
+                    label={walkAfterSave ? `✓ ${t('walkBoundaryAfterSave')}` : t('skipWalkForNow')}
                     tone={walkAfterSave ? 'info' : 'default'}
                     onPress={() => setWalkAfterSave((v) => !v)}
                   />
                   <View style={{ flexDirection: 'row', gap: 12 }}>
-                    <Button label="Cancel" variant="ghost" onPress={() => setShowAddFarmModal(false)} style={{ flex: 1 }} />
+                    <Button label={t('cancel')} variant="ghost" onPress={() => setShowAddFarmModal(false)} style={{ flex: 1 }} />
                     <Button
-                      label="Add field"
+                      label={t('addField')}
                       onPress={() => addFieldMutation.mutate()}
                       loading={addFieldMutation.isPending}
                       disabled={!newFieldName || !newFieldCrop}

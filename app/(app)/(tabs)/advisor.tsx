@@ -11,6 +11,7 @@ import {
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Animated,
+  Keyboard,
   KeyboardAvoidingView,
   Platform,
   TouchableOpacity,
@@ -226,6 +227,7 @@ export default function ModernAdvisorScreen() {
   const [isRecordingUi, setIsRecordingUi] = useState(false);
   const [activeSuggestion, setActiveSuggestion] = useState<string | null>(null);
   const [activeScan, setActiveScan] = useState<ScanDetail | null>(null);
+  const [keyboardHeight, setKeyboardHeight] = useState(0);
 
   const chatMutation = useMutation({
     mutationFn: (message: string) => advisorApi.chat(message, accessToken ?? ''),
@@ -296,9 +298,22 @@ export default function ModernAdvisorScreen() {
   }, []);
 
   useEffect(() => {
-    if (!messages.length) return;
+    const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
+    const hideEvent = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
+    const onShow = Keyboard.addListener(showEvent, (e) => {
+      setKeyboardHeight(e.endCoordinates.height);
+    });
+    const onHide = Keyboard.addListener(hideEvent, () => setKeyboardHeight(0));
+    return () => {
+      onShow.remove();
+      onHide.remove();
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!messages.length && keyboardHeight === 0) return;
     requestAnimationFrame(() => listRef.current?.scrollToEnd?.({ animated: true }));
-  }, [messages.length, isAgentTyping]);
+  }, [messages.length, isAgentTyping, keyboardHeight]);
 
   const startRecording = async () => {
     if (isRecordingRef.current || voiceBusyRef.current || isTranscribing) return;
@@ -448,12 +463,19 @@ export default function ModernAdvisorScreen() {
     // eslint-disable-next-line react-hooks/exhaustive-deps -- once per scanId after history loads
   }, [activeScan, scanIdParam, historyLoaded]);
 
+  // Tab bar (~70) sits under the keyboard on Android; lift chat by the overlap only.
+  const androidTabBar = 70;
+  const keyboardLift =
+    Platform.OS === 'android' && keyboardHeight > 0
+      ? Math.max(0, keyboardHeight - androidTabBar)
+      : 0;
+
   return (
     <Screen style={{ paddingTop: insets.top }}>
       <KeyboardAvoidingView
-        style={{ flex: 1 }}
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        keyboardVerticalOffset={Platform.OS === 'ios' ? 8 : 0}
+        style={{ flex: 1, marginBottom: keyboardLift }}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? insets.top : 0}
       >
         <AppHeader variant="default">
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
@@ -470,7 +492,7 @@ export default function ModernAdvisorScreen() {
             <Text variant="caption" style={{ fontWeight: '600' }}>
               {weatherSummary
                 ? `${weatherSummary.condition}, ${weatherSummary.high}°/${weatherSummary.low}°`
-                : 'Loading farm weather...'}
+                : t('loadingFarmWeather')}
             </Text>
           </Surface>
         </SystemMessageCard>
@@ -508,17 +530,17 @@ export default function ModernAdvisorScreen() {
                 />
                 <View style={{ flex: 1, gap: 4 }}>
                   <Text variant="caption" style={{ fontWeight: '700', color: theme.colors.primary }}>
-                    Crop scan attached
+                    {t('cropScanAttached')}
                   </Text>
                   <Text variant="headline" numberOfLines={1}>
                     {activeScan.diseaseName || activeScan.conditionLabel || activeScan.condition}
                   </Text>
                   <Text variant="caption" tone="muted" numberOfLines={2}>
-                    {activeScan.summary || 'Tap to reopen the full scan result'}
+                    {activeScan.summary || t('tapToReopenScan')}
                   </Text>
                   <Text variant="caption" tone="muted">
                     {activeScan.fieldName ? `${activeScan.fieldName} · ` : ''}
-                    {new Date(activeScan.date).toLocaleDateString()} · Tap to view
+                    {new Date(activeScan.date).toLocaleDateString()} · {t('tapToView')}
                   </Text>
                 </View>
               </View>
@@ -607,7 +629,11 @@ export default function ModernAdvisorScreen() {
           </Surface>
         ) : null}
 
-        <InputToolbar style={{ paddingBottom: Math.max(insets.bottom, 12) }}>
+        <InputToolbar
+          style={{
+            paddingBottom: keyboardHeight > 0 ? 10 : Math.max(insets.bottom, 12),
+          }}
+        >
           <AttachmentButton onPress={() => router.push('/farm-scan')}>
             <Ionicons name="scan" size={20} color={theme.colors.accent} />
           </AttachmentButton>

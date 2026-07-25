@@ -39,6 +39,8 @@ const config = {
       monochromeImage: './assets/images/agroaideLogo.png',
     },
     edgeToEdgeEnabled: true,
+    // Helps chat inputs (AI advisor) sit above the soft keyboard with tab bars.
+    softwareKeyboardLayoutMode: 'resize',
     predictiveBackGestureEnabled: false,
     permissions: [
       'android.permission.RECORD_AUDIO',

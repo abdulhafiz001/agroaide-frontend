@@ -18,6 +18,7 @@ import { ConfirmModal } from '@/components/ConfirmModal';
 import { useToast } from '@/components/Toast';
 import { Button, Chip, InputField, Surface, Text } from '@/design-system/components';
 import styled from '@/design-system/styled';
+import { useTranslation } from '@/i18n/useTranslation';
 import { calendarApi, type CalendarTask } from '@/services/calendarApi';
 import { useAppStore } from '@/store/useAppStore';
 
@@ -86,8 +87,14 @@ const impactColors: Record<string, string> = {
 export default function CalendarScreen() {
   const theme = useTheme();
   const toast = useToast();
+  const { t } = useTranslation();
   const token = useAppStore((s) => s.accessToken) ?? '';
   const queryClient = useQueryClient();
+
+  const periodLabel = (p: string) =>
+    p === 'morning' ? t('periodMorning') : p === 'afternoon' ? t('periodAfternoon') : t('periodEvening');
+  const impactLabel = (i: string) =>
+    i === 'low' ? t('impactLow') : i === 'medium' ? t('impactMedium') : t('impactHigh');
 
   const today = new Date().toISOString().split('T')[0];
   const [selectedDate, setSelectedDate] = useState(today);
@@ -141,18 +148,18 @@ export default function CalendarScreen() {
     },
     onSuccess: () => {
       invalidate();
-      toast.success('Task added', 'Planting task added to your calendar.');
+      toast.success(t('taskAdded'), t('plantingTaskAdded'));
     },
-    onError: () => toast.error('Error', 'Could not create planting task.'),
+    onError: () => toast.error(t('errorGeneric'), t('couldNotCreatePlanting')),
   });
 
   const watchMutation = useMutation({
     mutationFn: (crop: string) => calendarApi.addCropWatch(token, { crop, notifyWhenPlantingWindow: true }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['cropWatches'] });
-      toast.success('Watching', 'You will be notified when planting time arrives.');
+      toast.success(t('watching'), t('watchNotifyHint'));
     },
-    onError: () => toast.error('Error', 'Could not save crop watch.'),
+    onError: () => toast.error(t('errorGeneric'), t('couldNotSaveWatch')),
   });
 
   const unwatchMutation = useMutation({
@@ -166,7 +173,7 @@ export default function CalendarScreen() {
       period, durationMinutes: parseInt(duration) || 30, impact,
     }),
     onSuccess: () => { invalidate(); closeModal(); },
-    onError: () => toast.error('Error', 'Could not create task.'),
+    onError: () => toast.error(t('errorGeneric'), t('couldNotCreateTask')),
   });
 
   const updateMutation = useMutation({
@@ -175,7 +182,7 @@ export default function CalendarScreen() {
       period, durationMinutes: parseInt(duration) || 30, impact,
     }),
     onSuccess: () => { invalidate(); closeModal(); },
-    onError: () => toast.error('Error', 'Could not update task.'),
+    onError: () => toast.error(t('errorGeneric'), t('couldNotUpdateTask')),
   });
 
   const completeMutation = useMutation({
@@ -189,9 +196,9 @@ export default function CalendarScreen() {
     onSuccess: () => {
       invalidate();
       setDeleteTarget(null);
-      toast.success('Deleted', 'Task removed.');
+      toast.success(t('deleted'), t('taskRemoved'));
     },
-    onError: () => toast.error('Error', 'Could not delete task.'),
+    onError: () => toast.error(t('errorGeneric'), t('couldNotDeleteTask')),
   });
 
   const openAdd = () => {
@@ -200,9 +207,9 @@ export default function CalendarScreen() {
     setShowModal(true);
   };
 
-  const openEdit = (t: CalendarTask) => {
-    setEditingTask(t);
-    setTitle(t.title); setDescription(t.description ?? ''); setPeriod(t.period); setDuration(String(t.durationMinutes)); setImpact(t.impact);
+  const openEdit = (task: CalendarTask) => {
+    setEditingTask(task);
+    setTitle(task.title); setDescription(task.description ?? ''); setPeriod(task.period); setDuration(String(task.durationMinutes)); setImpact(task.impact);
     setShowModal(true);
   };
 
@@ -228,37 +235,37 @@ export default function CalendarScreen() {
     <Screen>
       <Container>
         <View style={{ paddingTop: 16, gap: 4 }}>
-          <Text variant="display">Calendar</Text>
-          <Text variant="body" tone="muted">Plan and track your farm activities</Text>
+          <Text variant="display">{t('calendarTitle')}</Text>
+          <Text variant="body" tone="muted">{t('planTrackActivities')}</Text>
         </View>
 
         <Section>
           <Surface rounded="xl" style={{ gap: 10, backgroundColor: `${theme.colors.primary}12` }}>
             <Text variant="eyebrow" tone="accent">
-              Season · {seasonalQuery.data?.zoneLabel ?? '…'}
+              {t('seasonLabel')} · {seasonalQuery.data?.zoneLabel ?? '…'}
             </Text>
             <Text variant="headline">
-              {seasonalQuery.data?.season?.isRainy ? 'Rainy season window' : 'Dry season window'}
+              {seasonalQuery.data?.season?.isRainy ? t('rainySeasonWindow') : t('drySeasonWindow')}
             </Text>
             <Text variant="caption" tone="muted">
-              Auto suggestions from crop calendars for Nigeria — no AI guesswork.
+              {t('seasonalAutoNote')}
             </Text>
             {(seasonalQuery.data?.suggestions ?? [])
               .filter((s) => s.plantingWindowActive)
               .map((s) => (
                 <Surface key={s.crop} rounded="lg" style={{ gap: 8 }}>
-                  <Text variant="headline">It&apos;s time for {s.crop}</Text>
+                  <Text variant="headline">{t('itsTimeFor')} {s.crop}</Text>
                   <Text variant="caption" tone="muted">
-                    Planting months: {(s.plantingMonths ?? []).join(', ')}
+                    {t('plantingMonths')}: {(s.plantingMonths ?? []).join(', ')}
                   </Text>
                   <View style={{ flexDirection: 'row', gap: 8, flexWrap: 'wrap' }}>
                     <Chip
-                      label="Add planting task"
+                      label={t('addPlantingTask')}
                       tone="success"
                       onPress={() => acceptSuggestionMutation.mutate(s)}
                     />
                     <Chip
-                      label="Watch alerts"
+                      label={t('watchAlerts')}
                       tone="info"
                       onPress={() => watchMutation.mutate(s.crop)}
                     />
@@ -267,16 +274,16 @@ export default function CalendarScreen() {
               ))}
             {(seasonalQuery.data?.suggestions ?? []).filter((s) => s.plantingWindowActive).length === 0 ? (
               <Text variant="caption" tone="muted">
-                No planting windows open for your crops right now. Add watches below to get notified later.
+                {t('noPlantingWindows')}
               </Text>
             ) : null}
           </Surface>
         </Section>
 
         <Section>
-          <Text variant="headline">Crop watches</Text>
+          <Text variant="headline">{t('cropWatches')}</Text>
           <Text variant="caption" tone="muted">
-            Pick crops you want alerts for when planting time starts in your zone.
+            {t('cropWatchesHint')}
           </Text>
           <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
             {WATCHABLE_CROPS.map((crop) => {
@@ -309,14 +316,14 @@ export default function CalendarScreen() {
           <View style={{ flexDirection: 'row', gap: 8, alignItems: 'flex-end' }}>
             <View style={{ flex: 1 }}>
               <InputField
-                label="Add another crop"
+                label={t('addAnotherCrop')}
                 value={customWatchCrop}
                 onChangeText={setCustomWatchCrop}
-                placeholder="e.g. Groundnut"
+                placeholder={t('groundnutPlaceholder')}
               />
             </View>
             <Button
-              label="Watch"
+              label={t('watch')}
               onPress={() => {
                 const crop = customWatchCrop.trim();
                 if (!crop) return;
@@ -353,10 +360,10 @@ export default function CalendarScreen() {
         <Section>
           <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
             <Text variant="headline">
-              {selectedDate === today ? "Today's tasks" : `Tasks for ${selectedDate}`}
+              {selectedDate === today ? t('todaysTasks') : `${t('tasksFor')} ${selectedDate}`}
             </Text>
             <TouchableOpacity onPress={openAdd}>
-              <Chip label="+ Add task" tone="success" />
+              <Chip label={`+ ${t('addTask')}`} tone="success" />
             </TouchableOpacity>
           </View>
 
@@ -365,8 +372,8 @@ export default function CalendarScreen() {
           ) : dayTasks.length === 0 ? (
             <Surface variant="muted" style={{ padding: 24, alignItems: 'center', gap: 8, borderRadius: 16 }}>
               <Ionicons name="calendar-outline" size={32} color={theme.colors.textSecondary} />
-              <Text tone="muted">No tasks for this day.</Text>
-              <Button label="Add a task" variant="outline" onPress={openAdd} />
+              <Text tone="muted">{t('noTasksForDay')}</Text>
+              <Button label={t('addTask')} variant="outline" onPress={openAdd} />
             </Surface>
           ) : (
             dayTasks.map((task) => (
@@ -393,10 +400,10 @@ export default function CalendarScreen() {
                   </View>
                 </View>
                 <View style={{ flexDirection: 'row', gap: 8, flexWrap: 'wrap' }}>
-                  <Chip label={task.period} tone="info" />
+                  <Chip label={periodLabel(task.period)} tone="info" />
                   <Chip label={`${task.durationMinutes} min`} tone="default" />
                   <Chip
-                    label={task.impact}
+                    label={impactLabel(task.impact)}
                     tone={task.impact === 'high' ? 'danger' : task.impact === 'medium' ? 'warning' : 'success'}
                   />
                 </View>
@@ -410,7 +417,7 @@ export default function CalendarScreen() {
                     color={task.completed ? '#2eb873' : theme.colors.textSecondary}
                   />
                   <Text variant="caption" tone={task.completed ? 'accent' : 'muted'}>
-                    {task.completed ? 'Completed' : 'Mark complete'}
+                    {task.completed ? t('completed') : t('markComplete')}
                   </Text>
                 </TouchableOpacity>
               </TaskCard>
@@ -432,34 +439,34 @@ export default function CalendarScreen() {
             <ModalContent>
               <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
                 <View style={{ gap: 16 }}>
-                  <Text variant="headline">{editingTask ? 'Edit task' : 'New task'}</Text>
-                  <InputField label="Title" value={title} onChangeText={setTitle} placeholder="e.g. Inspect maize field" />
+                  <Text variant="headline">{editingTask ? t('editTask') : t('newTask')}</Text>
+                  <InputField label={t('titleLabel')} value={title} onChangeText={setTitle} placeholder={t('inspectMaizePlaceholder')} />
                   <InputField
-                    label="Description (optional)"
+                    label={t('descriptionOptional')}
                     value={description}
                     onChangeText={setDescription}
-                    placeholder="Add details..."
+                    placeholder={t('addDetailsPlaceholder')}
                     multiline
                     numberOfLines={2}
                   />
-                  <Text variant="caption" tone="muted">Date: {selectedDate}</Text>
-                  <Text variant="caption" tone="muted">Time of day</Text>
+                  <Text variant="caption" tone="muted">{t('dateLabel')}: {selectedDate}</Text>
+                  <Text variant="caption" tone="muted">{t('timeOfDay')}</Text>
                   <View style={{ flexDirection: 'row', gap: 8, flexWrap: 'wrap' }}>
                     {periods.map((p) => (
-                      <Chip key={p} label={p} tone={period === p ? 'success' : 'default'} onPress={() => setPeriod(p)} />
+                      <Chip key={p} label={periodLabel(p)} tone={period === p ? 'success' : 'default'} onPress={() => setPeriod(p)} />
                     ))}
                   </View>
-                  <InputField label="Duration (minutes)" value={duration} onChangeText={setDuration} keyboardType="number-pad" />
-                  <Text variant="caption" tone="muted">Priority</Text>
+                  <InputField label={t('durationMinutes')} value={duration} onChangeText={setDuration} keyboardType="number-pad" />
+                  <Text variant="caption" tone="muted">{t('priority')}</Text>
                   <View style={{ flexDirection: 'row', gap: 8, flexWrap: 'wrap' }}>
                     {impacts.map((i) => (
-                      <Chip key={i} label={i} tone={impact === i ? 'success' : 'default'} onPress={() => setImpact(i)} />
+                      <Chip key={i} label={impactLabel(i)} tone={impact === i ? 'success' : 'default'} onPress={() => setImpact(i)} />
                     ))}
                   </View>
                   <View style={{ flexDirection: 'row', gap: 12, marginTop: 8 }}>
-                    <Button label="Cancel" variant="ghost" onPress={closeModal} style={{ flex: 1 }} />
+                    <Button label={t('cancel')} variant="ghost" onPress={closeModal} style={{ flex: 1 }} />
                     <Button
-                      label={editingTask ? 'Update' : 'Add task'}
+                      label={editingTask ? t('update') : t('addTask')}
                       onPress={() => (editingTask ? updateMutation.mutate() : createMutation.mutate())}
                       loading={createMutation.isPending || updateMutation.isPending}
                       disabled={!title}
@@ -475,9 +482,9 @@ export default function CalendarScreen() {
 
       <ConfirmModal
         visible={Boolean(deleteTarget)}
-        title="Delete task?"
+        title={t('deleteTaskConfirm')}
         message={`Are you sure you want to delete "${deleteTarget?.name ?? ''}"? This cannot be undone.`}
-        confirmLabel="Delete"
+        confirmLabel={t('deleteTask')}
         loading={deleteMutation.isPending}
         onCancel={() => setDeleteTarget(null)}
         onConfirm={() => {
