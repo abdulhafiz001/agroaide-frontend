@@ -158,7 +158,7 @@ export const farmApi = {
       method: 'POST',
       token,
       body: payload ?? {},
-      timeoutMs: 60000,
+      timeoutMs: 45000,
     });
   },
 

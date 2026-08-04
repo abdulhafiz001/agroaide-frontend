@@ -18,9 +18,11 @@ import { useToast } from '@/components/Toast';
 import { Button, Chip, InputField, Surface, Text } from '@/design-system/components';
 import styled from '@/design-system/styled';
 import { useTranslation } from '@/i18n/useTranslation';
+import { ApiError } from '@/services/apiClient';
 import { farmApi } from '@/services/farmApi';
 import { useAppStore } from '@/store/useAppStore';
 import { formatAreaWithFt, formatNaira } from '@/utils/formatters';
+import { computeInputEstimate, type InputEstimateResult } from '@/utils/inputEstimate';
 
 const STEP_CM = 75;
 
@@ -85,16 +87,42 @@ export default function FieldDetailScreen() {
   });
 
   const estimateMutation = useMutation({
-    mutationFn: () => {
+    mutationFn: async (): Promise<{ estimate: InputEstimateResult }> => {
       const rowVal = parseFloat(rowInput) || 0;
       const intraVal = parseFloat(intraInput) || 0;
-      const rowCm = spacingMode === 'steps' ? rowVal * STEP_CM : rowVal;
-      const intraCm = spacingMode === 'steps' ? intraVal * STEP_CM : intraVal;
-      return farmApi.inputEstimate(token, String(fieldId), {
+      let rowCm = spacingMode === 'steps' ? rowVal * STEP_CM : rowVal;
+      let intraCm = spacingMode === 'steps' ? intraVal * STEP_CM : intraVal;
+      rowCm = Math.max(1, Math.min(1000, rowCm || 75));
+      intraCm = Math.max(1, Math.min(1000, intraCm || 25));
+
+      const localEstimate = computeInputEstimate({
+        crop: field?.crop ?? 'Maize',
+        areaM2: Number(field?.area ?? 0),
+        hasMeasuredBoundary: Boolean(field?.hasMeasuredBoundary),
         rowCm,
         intraCm,
-        spacingMode,
       });
+
+      try {
+        const remote = await farmApi.inputEstimate(token, String(fieldId), {
+          rowCm,
+          intraCm,
+          spacingMode: 'cm',
+        });
+        if (remote?.estimate) {
+          return { estimate: remote.estimate as InputEstimateResult };
+        }
+      } catch (err) {
+        // Route missing / server error → still show local numbers so Calculate never looks broken.
+        if (!(err instanceof ApiError) || (err.statusCode !== 404 && err.statusCode !== 0 && err.statusCode < 500)) {
+          // Keep going to local fallback for common deploy/network issues.
+        }
+      }
+
+      return { estimate: localEstimate };
+    },
+    onError: (err: any) => {
+      toast.error('Calculate failed', err?.message || 'Could not calculate. Check your connection and try again.');
     },
   });
 
@@ -351,6 +379,16 @@ export default function FieldDetailScreen() {
                 <Text variant="caption" tone="muted">
                   Working from your field size…
                 </Text>
+              </Surface>
+            ) : null}
+
+            {estimateMutation.isError && !estimateMutation.isPending ? (
+              <Surface rounded="xl" style={{ gap: 8, padding: 16 }}>
+                <Text variant="headline">Could not calculate</Text>
+                <Text variant="caption" tone="muted">
+                  {(estimateMutation.error as any)?.message || 'Something went wrong. Try again.'}
+                </Text>
+                <Button label="Try again" variant="secondary" onPress={() => estimateMutation.mutate()} />
               </Surface>
             ) : null}
 
