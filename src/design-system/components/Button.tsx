@@ -31,8 +31,9 @@ const ButtonBase = styled.Pressable<{ variant: ButtonVariant; fullWidth?: boolea
         return theme.colors.primary;
     }
   }};
-  border-width: ${({ variant }) => (variant === 'ghost' ? 1 : 0)}px;
-  border-color: ${({ theme, variant }) => (variant === 'ghost' ? theme.colors.border : 'transparent')};
+  border-width: ${({ variant }) => (variant === 'ghost' || variant === 'secondary' ? 1 : 0)}px;
+  border-color: ${({ theme, variant }) =>
+    variant === 'ghost' || variant === 'secondary' ? theme.colors.border : 'transparent'};
   width: ${({ fullWidth }) => (fullWidth ? '100%' : 'auto')};
   opacity: ${({ disabled }) => (disabled ? 0.6 : 1)};
 `;

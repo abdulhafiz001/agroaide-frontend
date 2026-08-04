@@ -43,6 +43,18 @@ describe('routeForNotification', () => {
     assert.equal(routeForNotification('task_reminder').pathname, '/(app)/(tabs)/calendar');
   });
 
+  it('routes crop watch planting alerts to notification detail', () => {
+    const route = routeForNotification(
+      'crop_watch_planting',
+      { crop: 'Maize', bestPlantDate: '2026-05-01', canSetReminder: true, watchId: 3 },
+      { title: 'Plant maize', message: 'Good window', id: 9 },
+    );
+    assert.equal(route.pathname, '/(app)/notification-detail');
+    assert.equal(route.params?.crop, 'Maize');
+    assert.equal(route.params?.bestPlantDate, '2026-05-01');
+    assert.equal(route.params?.id, '9');
+  });
+
   it('falls back to notifications list for unknown types', () => {
     assert.equal(routeForNotification('unknown_type').pathname, '/(app)/notifications');
   });

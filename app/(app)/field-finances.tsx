@@ -210,13 +210,15 @@ export default function FieldFinancesScreen() {
 
   return (
     <Screen edges={['top', 'bottom']}>
-      <View style={{ paddingHorizontal: 16, paddingVertical: 8, flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-        <TouchableOpacity onPress={() => router.back()}>
-          <Ionicons name="arrow-back" size={24} color={theme.colors.text} />
+      <View style={{ paddingHorizontal: 16, paddingVertical: 10, flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: theme.colors.primary }}>
+        <TouchableOpacity onPress={() => router.back()} hitSlop={12}>
+          <Ionicons name="arrow-back" size={26} color="#fff" />
         </TouchableOpacity>
         <View style={{ flex: 1 }}>
-          <Text variant="headline">Field finances</Text>
-          <Text variant="caption" tone="muted">
+          <Text variant="headline" style={{ color: '#fff', fontWeight: '700' }}>
+            Field finances
+          </Text>
+          <Text variant="caption" style={{ color: 'rgba(255,255,255,0.85)' }}>
             {fieldName || `Field #${fieldId}`}
           </Text>
         </View>

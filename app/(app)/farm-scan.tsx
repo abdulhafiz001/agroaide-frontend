@@ -278,12 +278,12 @@ export default function FarmScanScreen() {
 
   return (
     <Screen>
-      <Header>
+      <Header style={{ backgroundColor: theme.colors.primary }}>
         <TouchableOpacity onPress={() => router.back()} hitSlop={12}>
-          <Ionicons name="arrow-back" size={24} color={theme.colors.textPrimary} />
+          <Ionicons name="arrow-back" size={26} color="#fff" />
         </TouchableOpacity>
-        <Ionicons name="scan" size={22} color={theme.colors.primary} />
-        <Text variant="title" style={{ flex: 1 }}>
+        <Ionicons name="scan" size={22} color="#fff" />
+        <Text variant="title" style={{ flex: 1, color: '#fff', fontWeight: '700' }}>
           {t('cropScanner')}
         </Text>
         <TouchableOpacity
@@ -295,10 +295,10 @@ export default function FarmScanScreen() {
             borderRadius: 20,
             alignItems: 'center',
             justifyContent: 'center',
-            backgroundColor: `${theme.colors.primary}15`,
+            backgroundColor: 'rgba(255,255,255,0.2)',
           }}
         >
-          <Ionicons name="time-outline" size={22} color={theme.colors.primary} />
+          <Ionicons name="time-outline" size={22} color="#fff" />
         </TouchableOpacity>
       </Header>
 

@@ -361,6 +361,16 @@ export default function FarmScreen() {
                     }
                   />
                   <Chip
+                    label="Seed & fertilizer"
+                    tone="success"
+                    onPress={() =>
+                      router.push({
+                        pathname: '/field-detail',
+                        params: { fieldId: field.id, fieldName: field.name },
+                      })
+                    }
+                  />
+                  <Chip
                     label={t('walkBoundary')}
                     tone="info"
                     onPress={() =>

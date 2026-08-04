@@ -1,22 +1,40 @@
 import { Ionicons } from '@expo/vector-icons';
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import React, { useRef } from 'react';
-import { ActivityIndicator, ScrollView, TouchableOpacity, View } from 'react-native';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import {
+  ActivityIndicator,
+  Alert,
+  Modal,
+  ScrollView,
+  TouchableOpacity,
+  View,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme } from 'styled-components/native';
 
 import { FarmMapView, type FarmMapViewHandle } from '@/components/FarmMapView';
-import { Button, Chip, Surface, Text } from '@/design-system/components';
+import { useToast } from '@/components/Toast';
+import { Button, Chip, InputField, Surface, Text } from '@/design-system/components';
 import styled from '@/design-system/styled';
 import { useTranslation } from '@/i18n/useTranslation';
 import { farmApi } from '@/services/farmApi';
 import { useAppStore } from '@/store/useAppStore';
 import { formatAreaWithFt, formatNaira } from '@/utils/formatters';
 
+const STEP_CM = 75;
+
 const Screen = styled(SafeAreaView)`
   flex: 1;
   background-color: ${({ theme }) => theme.colors.background};
+`;
+
+const HeaderBar = styled.View`
+  flex-direction: row;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 16px;
+  background-color: ${({ theme }) => theme.colors.primary};
 `;
 
 const Container = styled(ScrollView).attrs(({ theme }) => ({
@@ -26,13 +44,24 @@ const Container = styled(ScrollView).attrs(({ theme }) => ({
   },
 }))``;
 
+const calcSteps = ['Reading field area…', 'Counting plant stands…', 'Estimating seed…', 'Estimating fertilizer…', 'Writing your guide…'];
+
 export default function FieldDetailScreen() {
   const theme = useTheme();
   const router = useRouter();
+  const toast = useToast();
   const { t } = useTranslation();
   const token = useAppStore((s) => s.accessToken) ?? '';
+  const queryClient = useQueryClient();
   const mapRef = useRef<FarmMapViewHandle>(null);
   const { fieldId, fieldName } = useLocalSearchParams<{ fieldId: string; fieldName?: string }>();
+
+  const [boundaryMenu, setBoundaryMenu] = useState(false);
+  const [showCalc, setShowCalc] = useState(false);
+  const [spacingMode, setSpacingMode] = useState<'steps' | 'cm'>('steps');
+  const [rowInput, setRowInput] = useState('1');
+  const [intraInput, setIntraInput] = useState('0.33');
+  const [calcStep, setCalcStep] = useState(0);
 
   const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ['fieldDetail', fieldId],
@@ -44,19 +73,70 @@ export default function FieldDetailScreen() {
   const summary = data?.farmSummary;
   const mapData = data?.map;
 
+  const clearBoundaryMutation = useMutation({
+    mutationFn: () => farmApi.clearBoundary(token, String(fieldId)),
+    onSuccess: () => {
+      setBoundaryMenu(false);
+      queryClient.invalidateQueries({ queryKey: ['fieldDetail', fieldId] });
+      queryClient.invalidateQueries({ queryKey: ['farmOverview'] });
+      toast.success('Boundary removed', 'Walk a new boundary whenever you are ready.');
+    },
+    onError: () => toast.error('Error', 'Could not remove boundary.'),
+  });
+
+  const estimateMutation = useMutation({
+    mutationFn: () => {
+      const rowVal = parseFloat(rowInput) || 0;
+      const intraVal = parseFloat(intraInput) || 0;
+      const rowCm = spacingMode === 'steps' ? rowVal * STEP_CM : rowVal;
+      const intraCm = spacingMode === 'steps' ? intraVal * STEP_CM : intraVal;
+      return farmApi.inputEstimate(token, String(fieldId), {
+        rowCm,
+        intraCm,
+        spacingMode,
+      });
+    },
+  });
+
+  useEffect(() => {
+    if (!estimateMutation.isPending) {
+      setCalcStep(0);
+      return;
+    }
+    setCalcStep(0);
+    const id = setInterval(() => {
+      setCalcStep((s) => (s + 1) % calcSteps.length);
+    }, 900);
+    return () => clearInterval(id);
+  }, [estimateMutation.isPending]);
+
+  const estimate = estimateMutation.data?.estimate;
+
+  const openCalc = () => {
+    setShowCalc(true);
+    setSpacingMode('steps');
+    setRowInput('1');
+    setIntraInput('0.33');
+    estimateMutation.reset();
+  };
+
+  const dayRemindersNote = useMemo(() => null, []);
+
   return (
     <Screen edges={['top', 'bottom']}>
-      <View style={{ paddingHorizontal: 16, paddingVertical: 8, flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-        <TouchableOpacity onPress={() => router.back()}>
-          <Ionicons name="arrow-back" size={24} color={theme.colors.text} />
+      <HeaderBar>
+        <TouchableOpacity onPress={() => router.back()} hitSlop={12}>
+          <Ionicons name="arrow-back" size={26} color="#fff" style={{ fontWeight: '700' }} />
         </TouchableOpacity>
         <View style={{ flex: 1 }}>
-          <Text variant="headline">{field?.name || fieldName || t('fieldFallback')}</Text>
-          <Text variant="caption" tone="muted">
+          <Text variant="headline" style={{ color: '#fff', fontWeight: '700' }}>
+            {field?.name || fieldName || t('fieldFallback')}
+          </Text>
+          <Text variant="caption" style={{ color: 'rgba(255,255,255,0.85)' }}>
             {summary?.farmName ? `${t('insideFarm')} ${summary.farmName}` : t('fieldDetails')}
           </Text>
         </View>
-      </View>
+      </HeaderBar>
 
       <Container>
         {isLoading ? (
@@ -68,7 +148,7 @@ export default function FieldDetailScreen() {
           </Surface>
         ) : (
           <>
-            <Surface rounded="xl" style={{ gap: 10, marginTop: 8 }}>
+            <Surface rounded="xl" style={{ gap: 10, marginTop: 12 }}>
               <Text variant="eyebrow" tone="accent">
                 {t('overview')}
               </Text>
@@ -81,19 +161,11 @@ export default function FieldDetailScreen() {
                 <Chip label={`${t('moistureLabel')} ${field.moisture}%`} tone="info" />
                 <Chip label={field.status} tone={field.status === 'active' ? 'success' : 'default'} />
                 {field.hasMeasuredBoundary ? (
-                  <Chip label={t('boundaryMeasured')} tone="success" />
+                  <Chip label={t('boundaryMeasured')} tone="success" onPress={() => setBoundaryMenu(true)} />
                 ) : (
                   <Chip label={t('boundaryPending')} tone="warning" />
                 )}
-                {field.daysSincePlanting != null ? (
-                  <Chip label={`${t('dayLabel')} ${field.daysSincePlanting}`} tone="default" />
-                ) : null}
               </View>
-              {field.plantedAt ? (
-                <Text variant="caption" tone="muted">
-                  {t('planted')} {new Date(field.plantedAt).toLocaleDateString()}
-                </Text>
-              ) : null}
             </Surface>
 
             <Surface rounded="xl" style={{ gap: 10, marginTop: 12 }}>
@@ -135,9 +207,6 @@ export default function FieldDetailScreen() {
             {mapData ? (
               <View style={{ marginTop: 16, gap: 8 }}>
                 <Text variant="headline">{t('location')}</Text>
-                <Text variant="caption" tone="muted">
-                  {t('farmOutlineHint')}
-                </Text>
                 <View style={{ height: 220, borderRadius: 16, overflow: 'hidden' }}>
                   <FarmMapView
                     ref={mapRef}
@@ -153,16 +222,20 @@ export default function FieldDetailScreen() {
 
             <View style={{ marginTop: 20, gap: 10 }}>
               <Text variant="headline">{t('actions')}</Text>
-              <Button
-                label={t('walkUpdateBoundary')}
-                onPress={() =>
-                  router.push({
-                    pathname: '/walk-boundary',
-                    params: { fieldId: field.id, fieldName: field.name },
-                  })
-                }
-                fullWidth
-              />
+              <Button label="Seed & fertilizer guide" onPress={openCalc} fullWidth />
+              {!field.hasMeasuredBoundary ? (
+                <Button
+                  label={t('walkUpdateBoundary')}
+                  variant="secondary"
+                  onPress={() =>
+                    router.push({
+                      pathname: '/walk-boundary',
+                      params: { fieldId: field.id, fieldName: field.name },
+                    })
+                  }
+                  fullWidth
+                />
+              ) : null}
               <Button
                 label={t('scanCropHealth')}
                 variant="secondary"
@@ -176,7 +249,7 @@ export default function FieldDetailScreen() {
               />
               <Button
                 label={t('fieldFinances')}
-                variant="ghost"
+                variant="secondary"
                 onPress={() =>
                   router.push({
                     pathname: '/field-finances',
@@ -186,9 +259,136 @@ export default function FieldDetailScreen() {
                 fullWidth
               />
             </View>
+            {dayRemindersNote}
           </>
         )}
       </Container>
+
+      <Modal visible={boundaryMenu} transparent animationType="fade" onRequestClose={() => setBoundaryMenu(false)}>
+        <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'flex-end' }}>
+          <Surface rounded="xl" style={{ margin: 16, gap: 10, padding: 18 }}>
+            <Text variant="headline">Field boundary</Text>
+            <Text variant="caption" tone="muted">
+              Update by walking again, or delete so you can create a new one.
+            </Text>
+            <Button
+              label="Update boundary"
+              onPress={() => {
+                setBoundaryMenu(false);
+                router.push({
+                  pathname: '/walk-boundary',
+                  params: { fieldId: String(fieldId), fieldName: field?.name },
+                });
+              }}
+              fullWidth
+            />
+            <Button
+              label="Delete boundary"
+              variant="secondary"
+              loading={clearBoundaryMutation.isPending}
+              onPress={() =>
+                Alert.alert('Delete boundary?', 'The walked outline will be removed.', [
+                  { text: 'Cancel', style: 'cancel' },
+                  { text: 'Delete', style: 'destructive', onPress: () => clearBoundaryMutation.mutate() },
+                ])
+              }
+              fullWidth
+            />
+            <Button label="Cancel" variant="ghost" onPress={() => setBoundaryMenu(false)} fullWidth />
+          </Surface>
+        </View>
+      </Modal>
+
+      <Modal visible={showCalc} animationType="slide" onRequestClose={() => setShowCalc(false)}>
+        <SafeAreaView style={{ flex: 1, backgroundColor: theme.colors.background }}>
+          <HeaderBar>
+            <TouchableOpacity onPress={() => setShowCalc(false)} hitSlop={12}>
+              <Ionicons name="close" size={26} color="#fff" />
+            </TouchableOpacity>
+            <Text variant="headline" style={{ color: '#fff', fontWeight: '700', flex: 1 }}>
+              Seed & fertilizer
+            </Text>
+          </HeaderBar>
+          <ScrollView contentContainerStyle={{ padding: 16, gap: 14, paddingBottom: 40 }}>
+            <Text variant="caption" tone="muted">
+              Uses your field area. Spacing can be steps (1 step ≈ 75 cm) or centimetres.
+            </Text>
+            <View style={{ flexDirection: 'row', gap: 8 }}>
+              <Chip label="Steps" tone={spacingMode === 'steps' ? 'success' : 'default'} onPress={() => setSpacingMode('steps')} />
+              <Chip
+                label="cm"
+                tone={spacingMode === 'cm' ? 'success' : 'default'}
+                onPress={() => {
+                  setSpacingMode('cm');
+                  setRowInput(String(Math.round((parseFloat(rowInput) || 1) * STEP_CM)));
+                  setIntraInput(String(Math.round((parseFloat(intraInput) || 0.33) * STEP_CM)));
+                }}
+              />
+            </View>
+            <InputField
+              label={spacingMode === 'steps' ? 'Row spacing (steps)' : 'Row spacing (cm)'}
+              value={rowInput}
+              onChangeText={setRowInput}
+              keyboardType="decimal-pad"
+            />
+            <InputField
+              label={spacingMode === 'steps' ? 'Plant spacing (steps)' : 'Plant spacing (cm)'}
+              value={intraInput}
+              onChangeText={setIntraInput}
+              keyboardType="decimal-pad"
+            />
+            <Button
+              label="Calculate"
+              onPress={() => estimateMutation.mutate()}
+              loading={estimateMutation.isPending}
+              fullWidth
+            />
+
+            {estimateMutation.isPending ? (
+              <Surface rounded="xl" style={{ gap: 12, padding: 20, alignItems: 'center' }}>
+                <ActivityIndicator size="large" color={theme.colors.primary} />
+                <Text variant="headline">{calcSteps[calcStep]}</Text>
+                <Text variant="caption" tone="muted">
+                  Working from your field size…
+                </Text>
+              </Surface>
+            ) : null}
+
+            {estimate ? (
+              <Surface rounded="xl" style={{ gap: 12, marginTop: 8 }}>
+                {estimate.areaSource !== 'measured' ? (
+                  <Chip label="Using estimate area — walk boundary for accuracy" tone="warning" />
+                ) : (
+                  <Chip label="Using measured boundary area" tone="success" />
+                )}
+                <Text variant="headline">Results</Text>
+                <Text variant="body">Stands ≈ {estimate.population.toLocaleString()}</Text>
+                {estimate.seedUnit === 'kg' && estimate.seedKg != null ? (
+                  <Text variant="body">Seed ≈ {estimate.seedKg} kg</Text>
+                ) : (
+                  <Text variant="body">
+                    Planting material ≈ {estimate.seedStands ?? estimate.population} {estimate.seedUnit}
+                  </Text>
+                )}
+                {estimate.fertilizers.map((f) => (
+                  <Text key={f.name} variant="body">
+                    {f.name}: {f.kg} kg (~{f.bags50kg} × 50 kg bags)
+                  </Text>
+                ))}
+                <Surface variant="muted" style={{ padding: 12, borderRadius: 12, gap: 8 }}>
+                  <Text variant="caption" tone="accent">
+                    Farmer guide
+                  </Text>
+                  <Text variant="body">{estimate.aiSummary}</Text>
+                </Surface>
+                <Text variant="caption" tone="muted">
+                  {estimate.disclaimer}
+                </Text>
+              </Surface>
+            ) : null}
+          </ScrollView>
+        </SafeAreaView>
+      </Modal>
     </Screen>
   );
 }

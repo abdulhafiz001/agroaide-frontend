@@ -40,7 +40,6 @@ export const FarmMapView = forwardRef<FarmMapViewHandle, FarmMapViewProps>(funct
       label?: string;
     }> = [];
 
-    // Always draw the farm outline (outer boundary) when we have one.
     if (polygon.length >= 3) {
       layers.push({
         coordinates: polygon,
@@ -50,7 +49,6 @@ export const FarmMapView = forwardRef<FarmMapViewHandle, FarmMapViewProps>(funct
       });
     }
 
-    // Crop fields sit inside the farm.
     fields
       .filter((f) => f.polygon.length >= 3)
       .forEach((f, index) => {
@@ -69,18 +67,23 @@ export const FarmMapView = forwardRef<FarmMapViewHandle, FarmMapViewProps>(funct
     ref,
     () => ({
       zoomToFarm: () => {
-        mapRef.current?.animateToRegion(
-          {
-            latitude: center.latitude,
-            longitude: center.longitude,
-            latitudeDelta: 0.008,
-            longitudeDelta: 0.008,
-          },
-          600,
-        );
+        // Fit all farm + field polygons so both outlines are visible.
+        mapRef.current?.fitToPolygons();
+        // Fallback center zoom if no polygons yet.
+        if (polygons.length === 0) {
+          mapRef.current?.animateToRegion(
+            {
+              latitude: center.latitude,
+              longitude: center.longitude,
+              latitudeDelta: 0.008,
+              longitudeDelta: 0.008,
+            },
+            600,
+          );
+        }
       },
     }),
-    [center.latitude, center.longitude],
+    [center.latitude, center.longitude, polygons.length],
   );
 
   return (

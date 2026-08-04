@@ -15,7 +15,15 @@ export type CalendarTask = {
 export type CalendarResponse = {
   tasks: CalendarTask[];
   dayPlan: CalendarTask[];
-  markedDates: Record<string, { marked: boolean; dotColor: string }>;
+  dayReminders?: Array<{
+    id: string;
+    crop: string;
+    plantOn: string;
+    kind: string;
+    title: string;
+    description: string;
+  }>;
+  markedDates: Record<string, { marked: boolean; dotColor: string; plantingReminder?: boolean }>;
   selectedDate: string;
 };
 
@@ -112,6 +120,20 @@ export const calendarApi = {
     return apiRequest<{ message: string }>(`/calendar/crop-watches/${id}`, {
       method: 'DELETE',
       token,
+    });
+  },
+
+  setPlantingReminder(
+    token: string,
+    payload: { notificationId?: number; watchId?: number; crop: string; plantOn: string },
+  ) {
+    return apiRequest<{
+      reminder: { id: string; crop: string; plantOn: string; remind2dAt: string; remindOnAt: string };
+      localSchedule: Array<{ id: string; title: string; body: string; triggerAt: string }>;
+    }>('/calendar/planting-reminders', {
+      method: 'POST',
+      token,
+      body: payload,
     });
   },
 };

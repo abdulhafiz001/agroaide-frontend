@@ -32,6 +32,7 @@ export type LeafletMapHandle = {
     region: { latitude: number; longitude: number; latitudeDelta?: number; longitudeDelta?: number },
     _duration?: number,
   ) => void;
+  fitToPolygons: () => void;
 };
 
 type LeafletMapProps = {
@@ -151,6 +152,7 @@ function buildHtml({
     });
 
     var polygons = ${polygonsJson};
+    var polyLayers = [];
     polygons.forEach(function (p) {
       var poly = L.polygon(p.coords, {
         color: p.color,
@@ -158,6 +160,7 @@ function buildHtml({
         fillOpacity: p.fillOpacity,
         weight: 2
       }).addTo(map);
+      polyLayers.push(poly);
       if (p.label) {
         poly.bindTooltip(p.label, {
           permanent: true,
@@ -166,13 +169,27 @@ function buildHtml({
           opacity: 1
         });
       }
+      poly.on('click', function () {
+        fitAll();
+        try {
+          if (window.ReactNativeWebView && window.ReactNativeWebView.postMessage) {
+            window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'farmTap' }));
+          }
+        } catch (e) {}
+      });
     });
 
-    if (polygons.length > 0) {
-      var group = L.featureGroup(polygons.map(function (p) {
-        return L.polygon(p.coords);
-      }));
-      try { map.fitBounds(group.getBounds().pad(0.2)); } catch (e) {}
+    function fitAll() {
+      if (polyLayers.length === 0) {
+        map.setView([${center.latitude}, ${center.longitude}], ${zoom});
+        return;
+      }
+      var group = L.featureGroup(polyLayers);
+      try { map.fitBounds(group.getBounds().pad(0.22), { animate: true, duration: 0.6 }); } catch (e) {}
+    }
+
+    if (polyLayers.length > 0) {
+      fitAll();
     }
 
     setTimeout(function () { map.invalidateSize(); }, 120);
@@ -181,17 +198,20 @@ function buildHtml({
       map.flyTo([lat, lng], zoomLevel || map.getZoom(), { duration: 0.6 });
     }
     window.animateTo = animateTo;
+    window.fitAll = fitAll;
 
     document.addEventListener('message', function (event) {
       try {
         var data = JSON.parse(event.data);
         if (data.type === 'animateTo') animateTo(data.lat, data.lng, data.zoom);
+        if (data.type === 'fitAll') fitAll();
       } catch (e) {}
     });
     window.addEventListener('message', function (event) {
       try {
         var data = typeof event.data === 'string' ? JSON.parse(event.data) : event.data;
         if (data.type === 'animateTo') animateTo(data.lat, data.lng, data.zoom);
+        if (data.type === 'fitAll') fitAll();
       } catch (e) {}
     });
   </script>
@@ -236,6 +256,9 @@ export const LeafletMap = forwardRef<LeafletMapHandle, LeafletMapProps>(function
       webRef.current?.injectJavaScript(
         `window.animateTo && window.animateTo(${region.latitude}, ${region.longitude}, ${nextZoom}); true;`,
       );
+    },
+    fitToPolygons: () => {
+      webRef.current?.injectJavaScript(`window.fitAll && window.fitAll(); true;`);
     },
   }));
 

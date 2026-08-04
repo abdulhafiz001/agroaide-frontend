@@ -60,6 +60,11 @@ const typeIcons: Record<string, { name: string; color: string }> = {
   disease_outbreak: { name: 'warning-outline', color: '#b45309' },
   disease_warning: { name: 'alert-circle-outline', color: '#b45309' },
   scan_result: { name: 'scan-outline', color: '#b45309' },
+  planting_window: { name: 'leaf-outline', color: '#047857' },
+  crop_watch_planting: { name: 'leaf-outline', color: '#047857' },
+  crop_watch_season_passed: { name: 'calendar-outline', color: '#b45309' },
+  crop_watch_invalid: { name: 'close-circle-outline', color: '#b45309' },
+  planting_reminder: { name: 'alarm-outline', color: '#1d4ed8' },
 };
 
 const EmptyState = styled.View`
@@ -124,6 +129,7 @@ export default function NotificationsScreen() {
           const route = routeForNotification(item.type, item.data, {
             title: item.title,
             message: item.message,
+            id: item.id,
           });
           if (route.params && Object.keys(route.params).length > 0) {
             router.push({ pathname: route.pathname, params: route.params } as any);

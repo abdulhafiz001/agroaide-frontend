@@ -124,6 +124,44 @@ export const farmApi = {
     });
   },
 
+  clearBoundary(token: string, fieldId: string) {
+    return apiRequest<{ message: string; field: Partial<FarmField> }>(`/farm/fields/${fieldId}/boundary`, {
+      method: 'DELETE',
+      token,
+    });
+  },
+
+  inputEstimate(
+    token: string,
+    fieldId: string,
+    payload?: { rowCm?: number; intraCm?: number; spacingMode?: 'cm' | 'steps' },
+  ) {
+    return apiRequest<{
+      estimate: {
+        crop: string;
+        areaM2: number;
+        areaSource: string;
+        spacingMode: string;
+        rowCm: number;
+        intraCm: number;
+        rowSteps: number;
+        intraSteps: number;
+        population: number;
+        seedUnit: string;
+        seedKg: number | null;
+        seedStands: number | null;
+        fertilizers: Array<{ name: string; kg: number; bags50kg: number; kgPerHa: number }>;
+        disclaimer: string;
+        aiSummary: string;
+      };
+    }>(`/farm/fields/${fieldId}/input-estimate`, {
+      method: 'POST',
+      token,
+      body: payload ?? {},
+      timeoutMs: 60000,
+    });
+  },
+
   updateBoundary(
     token: string,
     fieldId: string,

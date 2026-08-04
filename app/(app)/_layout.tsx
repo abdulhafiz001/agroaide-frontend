@@ -24,6 +24,7 @@ export default function AppDrawerLayout() {
       <Drawer.Screen name="walk-boundary" options={{ title: 'Walk Boundary', drawerItemStyle: { display: 'none' } }} />
       <Drawer.Screen name="field-finances" options={{ title: 'Field Finances', drawerItemStyle: { display: 'none' } }} />
       <Drawer.Screen name="field-detail" options={{ title: 'Field Detail', drawerItemStyle: { display: 'none' } }} />
+      <Drawer.Screen name="notification-detail" options={{ title: 'Notification', drawerItemStyle: { display: 'none' } }} />
       <Drawer.Screen name="market" options={{ title: 'Market', drawerItemStyle: { display: 'none' } }} />
       <Drawer.Screen name="outbreak-map" options={{ title: 'Disease Map', drawerItemStyle: { display: 'none' } }} />
       <Drawer.Screen name="notifications" options={{ title: 'Notifications', drawerItemStyle: { display: 'none' } }} />

@@ -220,6 +220,7 @@ export default function CalendarScreen() {
   };
 
   const dayTasks = data?.dayPlan ?? [];
+  const dayReminders = data?.dayReminders ?? [];
   const markedDates = data?.markedDates ?? {};
 
   const calendarMarked = {
@@ -367,15 +368,29 @@ export default function CalendarScreen() {
             </TouchableOpacity>
           </View>
 
+          {dayReminders.length > 0 ? (
+            <View style={{ gap: 8 }}>
+              {dayReminders.map((reminder) => (
+                <Surface key={reminder.id} rounded="xl" style={{ gap: 6, borderWidth: 1, borderColor: '#3b82f6' }}>
+                  <Chip label="Planting reminder" tone="info" />
+                  <Text variant="headline">{reminder.title}</Text>
+                  <Text variant="caption" tone="muted">
+                    {reminder.description}
+                  </Text>
+                </Surface>
+              ))}
+            </View>
+          ) : null}
+
           {isLoading ? (
             <ActivityIndicator size="small" color={theme.colors.primary} />
-          ) : dayTasks.length === 0 ? (
+          ) : dayTasks.length === 0 && dayReminders.length === 0 ? (
             <Surface variant="muted" style={{ padding: 24, alignItems: 'center', gap: 8, borderRadius: 16 }}>
               <Ionicons name="calendar-outline" size={32} color={theme.colors.textSecondary} />
               <Text tone="muted">{t('noTasksForDay')}</Text>
-              <Button label={t('addTask')} variant="outline" onPress={openAdd} />
+              <Button label={t('addTask')} variant="secondary" onPress={openAdd} />
             </Surface>
-          ) : (
+          ) : dayTasks.length === 0 ? null : (
             dayTasks.map((task) => (
               <TaskCard key={task.id} rounded="xl" completed={task.completed}>
                 <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' }}>
