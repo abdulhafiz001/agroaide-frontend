@@ -21,6 +21,7 @@ import { Button, Chip, InputField, Surface, Text } from '@/design-system/compone
 import styled from '@/design-system/styled';
 import { useTranslation } from '@/i18n/useTranslation';
 import { farmApi, type FarmField, type JournalEntry } from '@/services/farmApi';
+import { isOfflineQueuedError, withOfflineQueue } from '@/services/offlineQueue';
 import { useAppStore } from '@/store/useAppStore';
 import { formatAreaWithFt, formatNaira } from '@/utils/formatters';
 
@@ -129,7 +130,22 @@ export default function FarmScreen() {
   const invalidate = () => queryClient.invalidateQueries({ queryKey: ['farmOverview'] });
 
   const addFieldMutation = useMutation({
-    mutationFn: () => farmApi.addField(token, { name: fieldName, crop: fieldCrop, areaM2: parseFloat(fieldArea) || 0 }),
+    mutationFn: () =>
+      withOfflineQueue({
+        actionType: 'field.create',
+        runOnline: (clientUuid) =>
+          farmApi.addField(token, {
+            name: fieldName,
+            crop: fieldCrop,
+            areaM2: parseFloat(fieldArea) || 0,
+            clientUuid,
+          }),
+        buildPayload: () => ({
+          name: fieldName,
+          crop: fieldCrop,
+          areaM2: parseFloat(fieldArea) || 0,
+        }),
+      }),
     onSuccess: (res) => {
       invalidate();
       closeFieldModal();
@@ -141,29 +157,94 @@ export default function FarmScreen() {
         });
       }
     },
-    onError: () => toast.error(t('errorGeneric'), t('couldNotAddField')),
+    onError: (err) => {
+      if (isOfflineQueuedError(err)) {
+        invalidate();
+        closeFieldModal();
+        toast.info('Saved offline', 'Field will sync when you reconnect. Walk boundary after sync.');
+        return;
+      }
+      toast.error(t('errorGeneric'), t('couldNotAddField'));
+    },
   });
 
   const updateFieldMutation = useMutation({
-    mutationFn: () => farmApi.updateField(token, editingField!.id, { name: fieldName, crop: fieldCrop, areaM2: parseFloat(fieldArea) || 0 }),
-    onSuccess: () => { invalidate(); closeFieldModal(); },
-    onError: () => toast.error('Error', 'Could not update field.'),
+    mutationFn: () =>
+      withOfflineQueue({
+        actionType: 'field.update',
+        runOnline: () =>
+          farmApi.updateField(token, editingField!.id, {
+            name: fieldName,
+            crop: fieldCrop,
+            areaM2: parseFloat(fieldArea) || 0,
+          }),
+        buildPayload: () => ({
+          id: Number(editingField!.id),
+          fieldId: Number(editingField!.id),
+          name: fieldName,
+          crop: fieldCrop,
+          areaM2: parseFloat(fieldArea) || 0,
+        }),
+      }),
+    onSuccess: () => {
+      invalidate();
+      closeFieldModal();
+    },
+    onError: (err) => {
+      if (isOfflineQueuedError(err)) {
+        invalidate();
+        closeFieldModal();
+        toast.info('Saved offline', 'Field update will sync when you reconnect.');
+        return;
+      }
+      toast.error('Error', 'Could not update field.');
+    },
   });
 
   const deleteFieldMutation = useMutation({
-    mutationFn: (id: string) => farmApi.deleteField(token, id),
+    mutationFn: (id: string) =>
+      withOfflineQueue({
+        actionType: 'field.delete',
+        runOnline: () => farmApi.deleteField(token, id),
+        buildPayload: () => ({ id: Number(id), fieldId: Number(id) }),
+      }),
     onSuccess: () => {
       invalidate();
       setDeleteTarget(null);
       toast.success('Deleted', 'Farm field removed.');
     },
-    onError: () => toast.error('Error', 'Could not delete field.'),
+    onError: (err) => {
+      if (isOfflineQueuedError(err)) {
+        invalidate();
+        setDeleteTarget(null);
+        toast.info('Queued offline', 'Field delete will sync when you reconnect.');
+        return;
+      }
+      toast.error('Error', 'Could not delete field.');
+    },
   });
 
   const addJournalMutation = useMutation({
-    mutationFn: () => farmApi.addJournalEntry(token, { note: journalNote, type: journalType }),
-    onSuccess: () => { invalidate(); closeJournalModal(); },
-    onError: () => toast.error('Error', 'Could not add journal entry.'),
+    mutationFn: () =>
+      withOfflineQueue({
+        actionType: 'journal.create',
+        runOnline: (clientUuid) =>
+          farmApi.addJournalEntry(token, { note: journalNote, type: journalType, clientUuid }),
+        buildPayload: () => ({ note: journalNote, type: journalType }),
+      }),
+    onSuccess: () => {
+      invalidate();
+      closeJournalModal();
+    },
+    onError: (err) => {
+      if (isOfflineQueuedError(err)) {
+        invalidate();
+        closeJournalModal();
+        toast.info('Saved offline', 'Journal entry will sync when you reconnect.');
+        return;
+      }
+      toast.error('Error', 'Could not add journal entry.');
+    },
   });
 
   const updateJournalMutation = useMutation({

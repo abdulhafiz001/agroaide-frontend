@@ -20,9 +20,7 @@ export interface FarmerProfile {
   preferredLanguage: SupportedLanguage;
   notificationPreferences?: {
     severeWeather: boolean;
-    marketMovers: boolean;
     aiInsights: boolean;
-    communityMentions: boolean;
     plantingWindowAlerts?: boolean;
     fieldBoundaryReminders?: boolean;
     diseaseOutbreak?: boolean;

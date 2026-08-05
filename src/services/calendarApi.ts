@@ -34,6 +34,7 @@ export type CreateTaskPayload = {
   period?: string;
   durationMinutes?: number;
   impact?: string;
+  clientUuid?: string;
 };
 
 export const calendarApi = {

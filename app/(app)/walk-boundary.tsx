@@ -128,17 +128,21 @@ export default function WalkBoundaryScreen() {
       toast.success('Boundary saved', formatAreaM2(areaM2));
       router.back();
     } catch (error: any) {
-      await enqueueSyncAction({
-        uuid: clientUuid,
-        clientTimestamp,
-        actionType: 'boundary.update',
-        payload: { fieldId: Number(fieldId), geojson, areaM2, clientUuid, clientTimestamp },
-      });
-      toast.info(
-        'Saved offline',
-        error?.message ? `Will sync when you reconnect. (${error.message})` : 'Will sync when you reconnect.',
-      );
-      router.back();
+      if (useAppStore.getState().offlineModeEnabled) {
+        await enqueueSyncAction({
+          uuid: clientUuid,
+          clientTimestamp,
+          actionType: 'boundary.update',
+          payload: { fieldId: Number(fieldId), geojson, areaM2, clientUuid, clientTimestamp },
+        });
+        toast.info(
+          'Saved offline',
+          error?.message ? `Will sync when you reconnect. (${error.message})` : 'Will sync when you reconnect.',
+        );
+        router.back();
+      } else {
+        toast.error('Could not save', error?.message || 'Check your connection and try again.');
+      }
     } finally {
       setSaving(false);
     }

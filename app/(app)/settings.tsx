@@ -72,7 +72,6 @@ const notificationSettings: {
   locked?: boolean;
 }[] = [
   { key: 'severeWeather', label: 'Critical weather alerts', description: 'Storms, heat waves & frost advisories.' },
-  { key: 'marketMovers', label: 'Market intelligence', description: 'Commodity spikes & best selling days.' },
   { key: 'aiInsights', label: 'AI agronomy tips', description: 'Timely crop health nudges.' },
   {
     key: 'plantingWindowAlerts',
@@ -478,7 +477,7 @@ export default function ProfileScreen() {
             <View style={{ flex: 1, paddingRight: 12 }}>
               <Text variant="headline">Offline sync</Text>
               <Text variant="caption" tone="muted">
-                Queue actions offline and push them when you reconnect.
+                Fields, tasks, journal notes, transactions, and boundaries queue offline and sync when you reconnect.
               </Text>
             </View>
             <Switch value={offlineModeEnabled} onValueChange={setOfflineMode} />

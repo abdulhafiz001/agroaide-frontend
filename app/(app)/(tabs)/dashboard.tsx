@@ -27,6 +27,7 @@ import { useTheme } from 'styled-components/native';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 
 import { useToast } from '@/components/Toast';
+import { isOfflineQueuedError, withOfflineQueue } from '@/services/offlineQueue';
 import { Button, Chip, InputField, ProgressDonut, Surface, Text } from '@/design-system/components';
 import styled from '@/design-system/styled';
 import { dashboardApi } from '@/services/dashboardApi';
@@ -173,10 +174,20 @@ export default function Dashboard() {
 
   const addFieldMutation = useMutation({
     mutationFn: () =>
-      farmApi.addField(accessToken ?? '', {
-        name: newFieldName,
-        crop: newFieldCrop,
-        areaM2: parseFloat(newFieldArea) || 0,
+      withOfflineQueue({
+        actionType: 'field.create',
+        runOnline: (clientUuid) =>
+          farmApi.addField(accessToken ?? '', {
+            name: newFieldName,
+            crop: newFieldCrop,
+            areaM2: parseFloat(newFieldArea) || 0,
+            clientUuid,
+          }),
+        buildPayload: () => ({
+          name: newFieldName,
+          crop: newFieldCrop,
+          areaM2: parseFloat(newFieldArea) || 0,
+        }),
       }),
     onSuccess: (res) => {
       queryClient.invalidateQueries({ queryKey: ['farmOverview'] });
@@ -192,7 +203,18 @@ export default function Dashboard() {
         });
       }
     },
-    onError: () => toast.error(t('errorGeneric'), t('couldNotAddField')),
+    onError: (err) => {
+      if (isOfflineQueuedError(err)) {
+        queryClient.invalidateQueries({ queryKey: ['farmOverview'] });
+        setShowAddFarmModal(false);
+        setNewFieldName('');
+        setNewFieldCrop('');
+        setNewFieldArea('');
+        toast.info('Saved offline', 'Field will sync when you reconnect.');
+        return;
+      }
+      toast.error(t('errorGeneric'), t('couldNotAddField'));
+    },
   });
 
   if (loading && !payload) {

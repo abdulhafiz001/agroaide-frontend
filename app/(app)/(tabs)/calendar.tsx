@@ -21,6 +21,7 @@ import { Button, Chip, InputField, Surface, Text } from '@/design-system/compone
 import styled from '@/design-system/styled';
 import { useTranslation } from '@/i18n/useTranslation';
 import { calendarApi, type CalendarTask } from '@/services/calendarApi';
+import { isOfflineQueuedError, withOfflineQueue } from '@/services/offlineQueue';
 import { useAppStore } from '@/store/useAppStore';
 
 const Screen = styled(SafeAreaView)`
@@ -179,20 +180,32 @@ export default function CalendarScreen() {
 
   const acceptSuggestionMutation = useMutation({
     mutationFn: async (suggestion: { crop: string; plantingWindowActive: boolean }) => {
-      return calendarApi.createTask(token, {
+      const payload = {
         title: `Start planting ${suggestion.crop}`,
         description: `Seasonal suggestion for your ${seasonalQuery.data?.zoneLabel ?? 'zone'}. Planting window is open.`,
         scheduledDate: selectedDate,
         period: 'morning',
         durationMinutes: 60,
         impact: 'high',
+      };
+      return withOfflineQueue({
+        actionType: 'task.create',
+        runOnline: (clientUuid) => calendarApi.createTask(token, { ...payload, clientUuid }),
+        buildPayload: () => payload,
       });
     },
     onSuccess: () => {
       invalidate();
       toast.success(t('taskAdded'), t('plantingTaskAdded'));
     },
-    onError: () => toast.error(t('errorGeneric'), t('couldNotCreatePlanting')),
+    onError: (err) => {
+      if (isOfflineQueuedError(err)) {
+        invalidate();
+        toast.info('Saved offline', 'Planting task will sync when you reconnect.');
+        return;
+      }
+      toast.error(t('errorGeneric'), t('couldNotCreatePlanting'));
+    },
   });
 
   const watchMutation = useMutation({
@@ -215,37 +228,104 @@ export default function CalendarScreen() {
   });
 
   const createMutation = useMutation({
-    mutationFn: () => calendarApi.createTask(token, {
-      title, description: description || undefined, scheduledDate: selectedDate,
-      period, durationMinutes: parseInt(duration) || 30, impact,
-    }),
-    onSuccess: () => { invalidate(); closeModal(); },
-    onError: () => toast.error(t('errorGeneric'), t('couldNotCreateTask')),
+    mutationFn: () => {
+      const payload = {
+        title,
+        description: description || undefined,
+        scheduledDate: selectedDate,
+        period,
+        durationMinutes: parseInt(duration) || 30,
+        impact,
+      };
+      return withOfflineQueue({
+        actionType: 'task.create',
+        runOnline: (clientUuid) => calendarApi.createTask(token, { ...payload, clientUuid }),
+        buildPayload: () => payload,
+      });
+    },
+    onSuccess: () => {
+      invalidate();
+      closeModal();
+    },
+    onError: (err) => {
+      if (isOfflineQueuedError(err)) {
+        invalidate();
+        closeModal();
+        toast.info('Saved offline', 'Task will sync when you reconnect.');
+        return;
+      }
+      toast.error(t('errorGeneric'), t('couldNotCreateTask'));
+    },
   });
 
   const updateMutation = useMutation({
-    mutationFn: () => calendarApi.updateTask(token, editingTask!.id, {
-      title, description: description || undefined, scheduledDate: selectedDate,
-      period, durationMinutes: parseInt(duration) || 30, impact,
-    }),
-    onSuccess: () => { invalidate(); closeModal(); },
-    onError: () => toast.error(t('errorGeneric'), t('couldNotUpdateTask')),
+    mutationFn: () => {
+      const payload = {
+        title,
+        description: description || undefined,
+        scheduledDate: selectedDate,
+        period,
+        durationMinutes: parseInt(duration) || 30,
+        impact,
+      };
+      return withOfflineQueue({
+        actionType: 'task.update',
+        runOnline: () => calendarApi.updateTask(token, editingTask!.id, payload),
+        buildPayload: () => ({ ...payload, id: Number(editingTask!.id), taskId: Number(editingTask!.id) }),
+      });
+    },
+    onSuccess: () => {
+      invalidate();
+      closeModal();
+    },
+    onError: (err) => {
+      if (isOfflineQueuedError(err)) {
+        invalidate();
+        closeModal();
+        toast.info('Saved offline', 'Task update will sync when you reconnect.');
+        return;
+      }
+      toast.error(t('errorGeneric'), t('couldNotUpdateTask'));
+    },
   });
 
   const completeMutation = useMutation({
     mutationFn: ({ id, completed }: { id: string; completed: boolean }) =>
-      calendarApi.markTaskComplete(token, id, completed),
+      withOfflineQueue({
+        actionType: 'task.complete',
+        runOnline: () => calendarApi.markTaskComplete(token, id, completed),
+        buildPayload: () => ({ id: Number(id), taskId: Number(id), completed }),
+      }),
     onSuccess: () => invalidate(),
+    onError: (err) => {
+      if (isOfflineQueuedError(err)) {
+        invalidate();
+        toast.info('Queued offline', 'Task status will sync when you reconnect.');
+      }
+    },
   });
 
   const deleteMutation = useMutation({
-    mutationFn: (id: string) => calendarApi.deleteTask(token, id),
+    mutationFn: (id: string) =>
+      withOfflineQueue({
+        actionType: 'task.delete',
+        runOnline: () => calendarApi.deleteTask(token, id),
+        buildPayload: () => ({ id: Number(id), taskId: Number(id) }),
+      }),
     onSuccess: () => {
       invalidate();
       setDeleteTarget(null);
       toast.success(t('deleted'), t('taskRemoved'));
     },
-    onError: () => toast.error(t('errorGeneric'), t('couldNotDeleteTask')),
+    onError: (err) => {
+      if (isOfflineQueuedError(err)) {
+        invalidate();
+        setDeleteTarget(null);
+        toast.info('Queued offline', 'Task delete will sync when you reconnect.');
+        return;
+      }
+      toast.error(t('errorGeneric'), t('couldNotDeleteTask'));
+    },
   });
 
   const openAdd = () => {

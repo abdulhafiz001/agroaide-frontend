@@ -174,7 +174,7 @@ export const farmApi = {
     });
   },
 
-  addJournalEntry(token: string, payload: { note: string; type?: string; farmFieldId?: number }) {
+  addJournalEntry(token: string, payload: { note: string; type?: string; farmFieldId?: number; clientUuid?: string }) {
     return apiRequest<{ entry: JournalEntry }>('/farm/journal', {
       method: 'POST',
       token,

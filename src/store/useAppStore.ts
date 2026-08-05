@@ -9,9 +9,7 @@ export type AuthStatus = 'signedOut' | 'authenticating' | 'authenticated';
 
 export type NotificationPreferences = {
   severeWeather: boolean;
-  marketMovers: boolean;
   aiInsights: boolean;
-  communityMentions: boolean;
   plantingWindowAlerts: boolean;
   fieldBoundaryReminders: boolean;
   /** Always on — cannot be disabled in the UI. */
@@ -55,12 +53,10 @@ export const useAppStore = create<AppState>()(
       onboardingCompleted: false,
       authStatus: 'signedOut',
       themePreference: 'system',
-      offlineModeEnabled: false,
+      offlineModeEnabled: true,
       notificationPreferences: {
         severeWeather: true,
-        marketMovers: true,
         aiInsights: true,
-        communityMentions: false,
         plantingWindowAlerts: true,
         fieldBoundaryReminders: true,
         diseaseOutbreak: true,

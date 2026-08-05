@@ -119,12 +119,14 @@ export default function FieldFinancesScreen() {
       try {
         return await farmApi.createTransaction(token, String(fieldId), payload);
       } catch (error: any) {
-        await enqueueSyncAction({
-          uuid: clientUuid,
-          clientTimestamp: new Date().toISOString(),
-          actionType: 'transaction.create',
-          payload: { ...payload, farmFieldId: Number(fieldId) },
-        });
+        if (useAppStore.getState().offlineModeEnabled) {
+          await enqueueSyncAction({
+            uuid: clientUuid,
+            clientTimestamp: new Date().toISOString(),
+            actionType: 'transaction.create',
+            payload: { ...payload, farmFieldId: Number(fieldId) },
+          });
+        }
         throw error;
       }
     },
@@ -137,7 +139,11 @@ export default function FieldFinancesScreen() {
     onError: () => {
       invalidate();
       setShowModal(false);
-      toast.info('Queued offline', 'Transaction will sync when you reconnect.');
+      if (useAppStore.getState().offlineModeEnabled) {
+        toast.info('Queued offline', 'Transaction will sync when you reconnect.');
+      } else {
+        toast.error('Could not save', 'Check your connection and try again.');
+      }
     },
   });
 

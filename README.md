@@ -50,12 +50,15 @@ Covers notification deep-link routing used when farmers open weather / disease p
 |-------|---------|
 | `(tabs)/dashboard` | Weather alert, tasks, soil proxies, forecast |
 | `(tabs)/farm` | Fields + journal |
-| `(tabs)/calendar` | Farm tasks |
+| `(tabs)/calendar` | Farm tasks + crop watches |
 | `(tabs)/advisor` | Context-aware AI chat (+ voice) |
 | `farm-scan` | Crop photo diagnosis + history |
 | `outbreak-map` | Nearby disease clusters |
 | `weather-detail` | Forecast + alerts |
+| `market` | Market Eye nearest-market prices + trends |
 | `notifications` | In-app inbox with deep links |
+
+Offline: fields, tasks, journal creates, transactions, and boundaries queue in SQLite and sync via `/sync/delta` on reconnect.
 
 ## Evaluation write-up
 
