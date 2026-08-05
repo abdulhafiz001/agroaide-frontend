@@ -499,12 +499,15 @@ export default function Dashboard() {
             </Surface>
           ) : (
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 12, paddingRight: 16 }}>
-              {marketData.marketPrices.slice(0, 4).map((item: MarketPrice, index: number) => (
+              {marketData.marketPrices.slice(0, 4).map((item: MarketPrice, index: number) => {
+                const price = item.price ?? item.pricePerTon;
+                const available = item.available !== false && price != null;
+                return (
                 <TouchableOpacity key={index} onPress={() => router.push('/(app)/market')} activeOpacity={0.7}>
                   <Surface
                     rounded="xl"
                     style={{
-                      width: 140,
+                      width: 148,
                       gap: 6,
                       paddingVertical: 14,
                       paddingHorizontal: 12,
@@ -513,10 +516,16 @@ export default function Dashboard() {
                       <Leaf size={16} color={theme.colors.primary} />
                       <Text variant="headline" numberOfLines={1}>{item.commodity}</Text>
                     </View>
-                    <Text variant="title" style={{ fontWeight: '700' }}>
-                      ₦{(item.pricePerTon / 1000).toFixed(0)}k
+                    <Text variant="title" style={{ fontWeight: '700', fontSize: available ? 18 : 13 }}>
+                      {available
+                        ? `₦${Number(price).toLocaleString('en-NG')}`
+                        : 'No price yet'}
+                    </Text>
+                    <Text variant="caption" tone="muted" numberOfLines={1}>
+                      {available && item.unit ? item.unit : item.location}
                     </Text>
                     <Text variant="caption" tone="muted" numberOfLines={1}>{item.location}</Text>
+                    {available ? (
                     <View style={{
                       alignSelf: 'flex-start',
                       paddingHorizontal: 8,
@@ -532,9 +541,11 @@ export default function Dashboard() {
                         {item.trend === 'up' ? `↑ ${t('rising')}` : item.trend === 'down' ? `↓ ${t('falling')}` : `→ ${t('stable')}`}
                       </Text>
                     </View>
+                    ) : null}
                   </Surface>
                 </TouchableOpacity>
-              ))}
+              );
+              })}
               <TouchableOpacity onPress={() => router.push('/(app)/market')} activeOpacity={0.7}>
                 <Surface
                   rounded="xl"

@@ -20,6 +20,7 @@ import styled from '@/design-system/styled';
 import { useTranslation } from '@/i18n/useTranslation';
 import { ApiError } from '@/services/apiClient';
 import { farmApi } from '@/services/farmApi';
+import { marketApi } from '@/services/marketApi';
 import { useAppStore } from '@/store/useAppStore';
 import { formatAreaWithFt, formatNaira } from '@/utils/formatters';
 import { computeInputEstimate, type InputEstimateResult } from '@/utils/inputEstimate';
@@ -74,6 +75,13 @@ export default function FieldDetailScreen() {
   const field = data?.field;
   const summary = data?.farmSummary;
   const mapData = data?.map;
+
+  const { data: cropMarket } = useQuery({
+    queryKey: ['marketIntel', field?.crop],
+    queryFn: () => marketApi.getMarketIntel(token, field?.crop),
+    enabled: Boolean(token && field?.crop),
+  });
+  const cropPrice = cropMarket?.marketPrices?.[0];
 
   const clearBoundaryMutation = useMutation({
     mutationFn: () => farmApi.clearBoundary(token, String(fieldId)),
@@ -194,6 +202,30 @@ export default function FieldDetailScreen() {
                   <Chip label={t('boundaryPending')} tone="warning" />
                 )}
               </View>
+              {cropPrice ? (
+                <Surface variant="muted" style={{ marginTop: 8, padding: 12, borderRadius: 12, gap: 4 }}>
+                  <Text variant="caption" tone="accent">
+                    Nearest market price
+                  </Text>
+                  <Text variant="headline">
+                    {cropPrice.available !== false && cropPrice.price != null
+                      ? `₦${Number(cropPrice.price).toLocaleString('en-NG')}${cropPrice.unit ? ` / ${cropPrice.unit}` : ''}`
+                      : 'No price yet'}
+                  </Text>
+                  <Text variant="caption" tone="muted">
+                    {cropMarket?.market?.name
+                      ? `${cropMarket.market.name}${cropMarket.market.city ? `, ${cropMarket.market.city}` : ''}`
+                      : cropPrice.location}
+                    {cropPrice.trend === 'up'
+                      ? ' · Rising'
+                      : cropPrice.trend === 'down'
+                        ? ' · Falling'
+                        : cropPrice.available
+                          ? ' · Stable'
+                          : ''}
+                  </Text>
+                </Surface>
+              ) : null}
             </Surface>
 
             <Surface rounded="xl" style={{ gap: 10, marginTop: 12 }}>
