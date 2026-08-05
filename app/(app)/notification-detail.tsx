@@ -110,7 +110,12 @@ export default function NotificationDetailScreen() {
         <Button
           label="Open calendar"
           variant="secondary"
-          onPress={() => router.push('/(app)/(tabs)/calendar')}
+          onPress={() =>
+            router.push({
+              pathname: '/(app)/(tabs)/calendar',
+              params: bestPlantDate ? { focusDate: String(bestPlantDate), focusCrop: String(params.crop || '') } : {},
+            })
+          }
           fullWidth
         />
       </ScrollView>

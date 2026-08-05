@@ -10,7 +10,6 @@ import {
     CloudSun,
     Droplets,
     Leaf,
-    MoreHorizontal,
     Snowflake,
     Sparkles,
     Plus,
@@ -570,10 +569,7 @@ export default function Dashboard() {
         </Section>
 
         <Section>
-          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-            <Text variant="headline">{t('soilConditions')}</Text>
-            <MoreHorizontal size={20} color={theme.colors.textSecondary} />
-          </View>
+          <Text variant="headline">{t('soilConditions')}</Text>
           <Text variant="caption" tone="muted" style={{ marginBottom: 4 }}>
             {t('soilOpenMeteoNote')}
           </Text>

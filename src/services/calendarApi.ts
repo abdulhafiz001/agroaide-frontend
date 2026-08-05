@@ -105,6 +105,9 @@ export const calendarApi = {
         crop: string;
         notifyWhenPlantingWindow: boolean;
         lastNotifiedOn: string | null;
+        status?: string;
+        bestPlantDate?: string | null;
+        lastAnalysisStatus?: string | null;
       }>;
     }>('/calendar/crop-watches', { token });
   },

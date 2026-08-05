@@ -1,6 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import React, { useState } from 'react';
+import { useLocalSearchParams } from 'expo-router';
+import React, { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   KeyboardAvoidingView,
@@ -84,12 +85,23 @@ const impactColors: Record<string, string> = {
   low: '#57b346',
 };
 
+type WatchItem = {
+  id: string;
+  crop: string;
+  notifyWhenPlantingWindow: boolean;
+  lastNotifiedOn: string | null;
+  status?: string;
+  bestPlantDate?: string | null;
+  lastAnalysisStatus?: string | null;
+};
+
 export default function CalendarScreen() {
   const theme = useTheme();
   const toast = useToast();
   const { t } = useTranslation();
   const token = useAppStore((s) => s.accessToken) ?? '';
   const queryClient = useQueryClient();
+  const { focusDate, focusCrop } = useLocalSearchParams<{ focusDate?: string; focusCrop?: string }>();
 
   const periodLabel = (p: string) =>
     p === 'morning' ? t('periodMorning') : p === 'afternoon' ? t('periodAfternoon') : t('periodEvening');
@@ -107,6 +119,13 @@ export default function CalendarScreen() {
   const [duration, setDuration] = useState('30');
   const [impact, setImpact] = useState<string>('medium');
   const [deleteTarget, setDeleteTarget] = useState<{ id: string; name: string } | null>(null);
+  const [unwatchTarget, setUnwatchTarget] = useState<WatchItem | null>(null);
+
+  useEffect(() => {
+    if (focusDate && typeof focusDate === 'string') {
+      setSelectedDate(focusDate);
+    }
+  }, [focusDate]);
 
   const { data, isLoading, refetch } = useQuery({
     queryKey: ['calendar', selectedDate],
@@ -128,11 +147,34 @@ export default function CalendarScreen() {
 
   const [customWatchCrop, setCustomWatchCrop] = useState('');
 
-  const WATCHABLE_CROPS = ['Maize', 'Cassava', 'Yam', 'Tomato', 'Rice', 'Sorghum', 'Millet', 'Cowpea'];
+  const WATCHABLE_CROPS = ['Maize', 'Cassava', 'Yam', 'Tomato', 'Rice', 'Sorghum', 'Millet', 'Cowpea', 'Beans'];
 
   const invalidate = () => {
     queryClient.invalidateQueries({ queryKey: ['calendar'] });
     queryClient.invalidateQueries({ queryKey: ['dashboardSnapshot'] });
+    queryClient.invalidateQueries({ queryKey: ['cropWatches'] });
+  };
+
+  const watches: WatchItem[] = watchesQuery.data?.watches ?? [];
+
+  const findWatch = (crop: string) =>
+    watches.find((w) => {
+      const a = w.crop.toLowerCase();
+      const b = crop.toLowerCase();
+      if (a === b) return true;
+      // Beans ↔ Cowpea (backend alias)
+      if ((a === 'cowpea' || a === 'beans') && (b === 'cowpea' || b === 'beans')) return true;
+      return false;
+    });
+
+  const analysisLabel = (w: WatchItem) => {
+    if (w.lastAnalysisStatus === 'window_open' && w.bestPlantDate) {
+      return `Plant by ${w.bestPlantDate}`;
+    }
+    if (w.lastAnalysisStatus === 'season_passed') return 'Season passed this year';
+    if (w.lastAnalysisStatus === 'waiting') return 'Waiting for planting window';
+    if (w.bestPlantDate) return `Plant by ${w.bestPlantDate}`;
+    return 'Watching — analysis pending';
   };
 
   const acceptSuggestionMutation = useMutation({
@@ -164,7 +206,12 @@ export default function CalendarScreen() {
 
   const unwatchMutation = useMutation({
     mutationFn: (id: string) => calendarApi.removeCropWatch(token, id),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['cropWatches'] }),
+    onSuccess: () => {
+      invalidate();
+      setUnwatchTarget(null);
+      toast.success('Unwatched', 'Crop removed from your watch list.');
+    },
+    onError: () => toast.error(t('errorGeneric'), 'Could not remove crop watch.'),
   });
 
   const createMutation = useMutation({
@@ -221,7 +268,18 @@ export default function CalendarScreen() {
 
   const dayTasks = data?.dayPlan ?? [];
   const dayReminders = data?.dayReminders ?? [];
-  const markedDates = data?.markedDates ?? {};
+  const markedDates = { ...(data?.markedDates ?? {}) } as Record<string, any>;
+
+  // Ensure analyzed watch plant dates show as green dots even before calendar refetch.
+  for (const w of watches) {
+    if (w.bestPlantDate) {
+      markedDates[w.bestPlantDate] = {
+        ...(markedDates[w.bestPlantDate] || {}),
+        marked: true,
+        dotColor: '#166534',
+      };
+    }
+  }
 
   const calendarMarked = {
     ...markedDates,
@@ -288,32 +346,67 @@ export default function CalendarScreen() {
           </Text>
           <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
             {WATCHABLE_CROPS.map((crop) => {
-              const existing = (watchesQuery.data?.watches ?? []).find(
-                (w) => w.crop.toLowerCase() === crop.toLowerCase(),
-              );
+              const existing = findWatch(crop);
               return (
                 <Chip
                   key={crop}
                   label={existing ? `✓ ${crop}` : crop}
                   tone={existing ? 'success' : 'default'}
                   onPress={() => {
-                    if (existing) unwatchMutation.mutate(existing.id);
+                    if (existing) setUnwatchTarget(existing);
                     else watchMutation.mutate(crop);
                   }}
                 />
               );
             })}
-            {(watchesQuery.data?.watches ?? [])
-              .filter((w) => !WATCHABLE_CROPS.some((c) => c.toLowerCase() === w.crop.toLowerCase()))
+            {watches
+              .filter(
+                (w) =>
+                  !WATCHABLE_CROPS.some(
+                    (c) =>
+                      c.toLowerCase() === w.crop.toLowerCase() ||
+                      ((c === 'Beans' || c === 'Cowpea') &&
+                        (w.crop.toLowerCase() === 'beans' || w.crop.toLowerCase() === 'cowpea')),
+                  ),
+              )
               .map((w) => (
                 <Chip
                   key={w.id}
                   label={`✓ ${w.crop}`}
                   tone="success"
-                  onPress={() => unwatchMutation.mutate(w.id)}
+                  onPress={() => setUnwatchTarget(w)}
                 />
               ))}
           </View>
+
+          {watches.length > 0 ? (
+            <View style={{ gap: 8, marginTop: 4 }}>
+              {watches.map((w) => (
+                <TouchableOpacity key={w.id} onPress={() => setUnwatchTarget(w)} activeOpacity={0.7}>
+                  <Surface
+                    rounded="lg"
+                    style={{
+                      gap: 4,
+                      borderWidth: focusCrop && w.crop.toLowerCase() === String(focusCrop).toLowerCase() ? 1.5 : 0,
+                      borderColor: theme.colors.primary,
+                    }}>
+                    <Text variant="headline">{w.crop}</Text>
+                    <Text variant="caption" tone="muted">
+                      {analysisLabel(w)}
+                    </Text>
+                    {w.bestPlantDate ? (
+                      <Chip
+                        label={`Calendar: ${w.bestPlantDate}`}
+                        tone="success"
+                        onPress={() => setSelectedDate(w.bestPlantDate!)}
+                      />
+                    ) : null}
+                  </Surface>
+                </TouchableOpacity>
+              ))}
+            </View>
+          ) : null}
+
           <View style={{ flexDirection: 'row', gap: 8, alignItems: 'flex-end' }}>
             <View style={{ flex: 1 }}>
               <InputField
@@ -504,6 +597,27 @@ export default function CalendarScreen() {
         onCancel={() => setDeleteTarget(null)}
         onConfirm={() => {
           if (deleteTarget) deleteMutation.mutate(deleteTarget.id);
+        }}
+      />
+
+      <ConfirmModal
+        visible={Boolean(unwatchTarget)}
+        title={`Unwatch ${unwatchTarget?.crop ?? 'crop'}?`}
+        message={
+          unwatchTarget
+            ? `${analysisLabel(unwatchTarget)}.${
+                unwatchTarget.bestPlantDate
+                  ? ` Suggested plant date ${unwatchTarget.bestPlantDate} will leave the calendar.`
+                  : ''
+              } Stop watching this crop?`
+            : ''
+        }
+        confirmLabel="Unwatch"
+        cancelLabel="Keep watching"
+        loading={unwatchMutation.isPending}
+        onCancel={() => setUnwatchTarget(null)}
+        onConfirm={() => {
+          if (unwatchTarget) unwatchMutation.mutate(unwatchTarget.id);
         }}
       />
     </Screen>

@@ -562,13 +562,6 @@ export default function ProfileScreen() {
               ))}
             </SegmentedControl>
           </View>
-          <Row>
-            <View>
-              <Text variant="body">Voice tips</Text>
-              <Text variant="caption" tone="muted">Read out AI insights during fieldwork.</Text>
-            </View>
-            <Switch value={aiAdvisorPreference.voiceTips} onValueChange={(v) => updateAiAdvisorPreference({ voiceTips: v })} />
-          </Row>
         </Section>
 
         <Button
