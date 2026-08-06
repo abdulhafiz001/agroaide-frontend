@@ -223,13 +223,10 @@ type TranslationKeys = {
   aiAdvisorTuning: string;
   detailLevel: string;
   advisoryTone: string;
-  voiceFriendlyTips: string;
-  voiceFriendlyTipsHint: string;
   legalAndYourData: string;
   privacyNotice: string;
   termsOfUse: string;
   exportMyData: string;
-  clearAdvisorScanHistories: string;
   criticalWeatherAlerts: string;
   aiAgronomyTips: string;
   plantingWindowAlerts: string;
@@ -438,13 +435,10 @@ const translations: Record<SupportedLanguage, TranslationKeys> = {
     aiAdvisorTuning: 'AI advisor tuning',
     detailLevel: 'Detail level',
     advisoryTone: 'Advisory tone',
-    voiceFriendlyTips: 'Voice-friendly tips',
-    voiceFriendlyTipsHint: 'Use shorter guidance that is easier to hear.',
     legalAndYourData: 'Legal and your data',
     privacyNotice: 'Privacy notice',
     termsOfUse: 'Terms of use',
     exportMyData: 'Export my data',
-    clearAdvisorScanHistories: 'Clear advisor and scan histories',
     criticalWeatherAlerts: 'Critical weather alerts',
     aiAgronomyTips: 'AI agronomy tips',
     plantingWindowAlerts: 'Planting window alerts',
@@ -650,13 +644,10 @@ const translations: Record<SupportedLanguage, TranslationKeys> = {
     aiAdvisorTuning: 'Saitin mai ba da shawarar AI',
     detailLevel: 'Yawan bayani',
     advisoryTone: 'Salon shawara',
-    voiceFriendlyTips: 'Shawara mai sauƙin sauraro',
-    voiceFriendlyTipsHint: 'Yi amfani da gajeriyar shawara mai sauƙin ji.',
     legalAndYourData: 'Doka da bayananka',
     privacyNotice: 'Bayanin sirri',
     termsOfUse: 'Sharuɗɗan amfani',
     exportMyData: 'Fitar da bayanana',
-    clearAdvisorScanHistories: 'Goge tarihin shawara da bincike',
     criticalWeatherAlerts: 'Muhimman faɗakarwar yanayi',
     aiAgronomyTips: 'Shawarwarin noma na AI',
     plantingWindowAlerts: 'Faɗakarwar lokacin shuka',
@@ -862,13 +853,10 @@ const translations: Record<SupportedLanguage, TranslationKeys> = {
     aiAdvisorTuning: 'Ètò oludamọran AI',
     detailLevel: 'Ipele alaye',
     advisoryTone: 'Ohun imọran',
-    voiceFriendlyTips: 'Imọran ti o rọrun lati gbọ',
-    voiceFriendlyTipsHint: 'Lo imọran kukuru ti o rọrun lati gbọ.',
     legalAndYourData: 'Ofin ati data rẹ',
     privacyNotice: 'Akiyesi aṣiri',
     termsOfUse: 'Awọn ofin lilo',
     exportMyData: 'Gba data mi jade',
-    clearAdvisorScanHistories: 'Pa itan imọran ati ayẹwo rẹ',
     criticalWeatherAlerts: 'Ikilọ oju-ọjọ pataki',
     aiAgronomyTips: 'Imọran ogbin AI',
     plantingWindowAlerts: 'Ikilọ akoko gbingbin',
@@ -1074,13 +1062,10 @@ const translations: Record<SupportedLanguage, TranslationKeys> = {
     aiAdvisorTuning: 'AI adviser settings',
     detailLevel: 'How much detail',
     advisoryTone: 'Advice style',
-    voiceFriendlyTips: 'Tips wey easy to hear',
-    voiceFriendlyTipsHint: 'Use shorter advice wey easy to listen to.',
     legalAndYourData: 'Legal matter and your data',
     privacyNotice: 'Privacy notice',
     termsOfUse: 'Terms of use',
     exportMyData: 'Export my data',
-    clearAdvisorScanHistories: 'Clear adviser and scan history',
     criticalWeatherAlerts: 'Serious weather alerts',
     aiAgronomyTips: 'AI farming tips',
     plantingWindowAlerts: 'Planting time alerts',

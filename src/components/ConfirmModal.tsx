@@ -8,10 +8,12 @@ type ConfirmModalProps = {
   visible: boolean;
   title: string;
   message: string;
+  children?: React.ReactNode;
   confirmLabel?: string;
   cancelLabel?: string;
   destructive?: boolean;
   loading?: boolean;
+  confirmDisabled?: boolean;
   onConfirm: () => void;
   onCancel: () => void;
 };
@@ -49,10 +51,12 @@ export function ConfirmModal({
   visible,
   title,
   message,
+  children,
   confirmLabel = 'Delete',
   cancelLabel = 'Cancel',
   destructive = true,
   loading = false,
+  confirmDisabled = false,
   onConfirm,
   onCancel,
 }: ConfirmModalProps) {
@@ -64,6 +68,7 @@ export function ConfirmModal({
           <Text variant="body" tone="muted">
             {message}
           </Text>
+          {children}
           <Actions>
             <CancelWrapper>
               <Button
@@ -80,6 +85,7 @@ export function ConfirmModal({
                 label={confirmLabel}
                 onPress={onConfirm}
                 loading={loading}
+                disabled={confirmDisabled || loading}
                 fullWidth
                 style={destructive ? { backgroundColor: '#e63946' } : undefined}
               />

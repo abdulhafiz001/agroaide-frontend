@@ -89,6 +89,8 @@ export default function LoginScreen() {
               keyboardType="default"
               autoCapitalize="none"
               autoCorrect={false}
+              autoComplete="username"
+              textContentType="username"
               value={identifier}
               onChangeText={setIdentifier}
               placeholder="name@email.com or 0803..."
@@ -96,6 +98,8 @@ export default function LoginScreen() {
             <InputField
               label="Password"
               secureTextEntry={!showPassword}
+              autoComplete="current-password"
+              textContentType="password"
               value={password}
               onChangeText={setPassword}
               rightElement={

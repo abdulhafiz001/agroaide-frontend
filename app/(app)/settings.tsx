@@ -2,13 +2,14 @@ import { Ionicons } from '@expo/vector-icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'expo-router';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { Alert, KeyboardAvoidingView, Platform, Switch, TouchableOpacity, View } from 'react-native';
+import { KeyboardAvoidingView, Platform, Switch, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import styled, { useTheme } from '@/design-system/styled';
 
 import * as Location from 'expo-location';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
+import { ConfirmModal } from '@/components/ConfirmModal';
 import { useToast } from '@/components/Toast';
 import { Button, Chip, InputField, Surface, Text } from '@/design-system/components';
 import { authApi } from '@/services/authApi';
@@ -130,7 +131,6 @@ export default function ProfileScreen() {
   const lastSyncISO = useAppStore((s) => s.lastSyncISO);
   const offlineModeEnabled = useAppStore((s) => s.offlineModeEnabled);
   const setOfflineMode = useAppStore((s) => s.setOfflineMode);
-  const clearPersonalDataViews = useAppStore((s) => s.clearPersonalDataViews);
   const [pendingSyncCount, setPendingSyncCount] = useState(0);
   const [syncingNow, setSyncingNow] = useState(false);
 
@@ -145,6 +145,8 @@ export default function ProfileScreen() {
   const [editSoilType, setEditSoilType] = useState('');
 
   const [showPasswordSection, setShowPasswordSection] = useState(false);
+  const [showLegalSection, setShowLegalSection] = useState(false);
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmNewPassword, setConfirmNewPassword] = useState('');
@@ -288,7 +290,7 @@ export default function ProfileScreen() {
         }
       }
 
-      const baseDirectory = FileSystem.cacheDirectory ?? FileSystem.documentDirectory;
+      const baseDirectory = FileSystem.documentDirectory ?? FileSystem.cacheDirectory;
       if (baseDirectory) {
         try {
           const fileUri = `${baseDirectory}${safeFilename}`;
@@ -321,25 +323,6 @@ export default function ProfileScreen() {
     onError: () => toast.error('Export failed', 'We could not prepare your data. Please try again.'),
   });
 
-  const clearHistoriesMutation = useMutation({
-    mutationFn: () => authApi.clearHistories(accessToken ?? ''),
-    onSuccess: async () => {
-      const personalPrefixes = new Set([
-        'advisorHistory',
-        'advisorScanContext',
-        'scanHistory',
-        'farmScan',
-        'dashboardAiInsights',
-      ]);
-      queryClient.removeQueries({
-        predicate: (query) => personalPrefixes.has(String(query.queryKey[0] ?? '')),
-      });
-      clearPersonalDataViews();
-      toast.success('Histories cleared', 'Advisor and scan histories were removed.');
-    },
-    onError: () => toast.error('Could not clear histories', 'Please try again.'),
-  });
-
   const deleteAccountMutation = useMutation({
     mutationFn: () => authApi.deleteAccount(accessToken ?? '', deletePassword),
     onSuccess: async () => {
@@ -350,6 +333,7 @@ export default function ProfileScreen() {
       clearAuthQueryCache();
       signOut();
       console.info('[auth] account deleted; local session cleared');
+      setShowDeleteDialog(false);
       router.replace('/auth/login');
     },
     onError: () => toast.error('Could not delete account', 'Check your password and try again.'),
@@ -705,70 +689,44 @@ export default function ProfileScreen() {
               ))}
             </SegmentedControl>
           </View>
-          <Row>
-            <View style={{ flex: 1, paddingRight: 12 }}>
-              <Text variant="body">{t('voiceFriendlyTips')}</Text>
-              <Text variant="caption" tone="muted">{t('voiceFriendlyTipsHint')}</Text>
-            </View>
-            <Switch
-              value={aiAdvisorPreference.voiceTips}
-              onValueChange={(value) => {
-                updateAiAdvisorPreference({ voiceTips: value });
-                authApi.updateProfile(accessToken ?? '', { aiVoiceTips: value }).catch(() => {});
-              }}
-              accessibilityRole="switch"
-              accessibilityLabel={t('voiceFriendlyTips')}
-              accessibilityState={{ checked: aiAdvisorPreference.voiceTips }}
-            />
-          </Row>
         </Section>
 
         <Section rounded="xl">
-          <Text variant="headline">{t('legalAndYourData')}</Text>
-          <Button label={t('privacyNotice')} variant="secondary" onPress={() => router.push('/privacy' as never)} fullWidth />
-          <Button label={t('termsOfUse')} variant="secondary" onPress={() => router.push('/terms' as never)} fullWidth />
-          <Button
-            label={t('exportMyData')}
-            variant="secondary"
-            loading={exportAccountMutation.isPending}
-            onPress={() => exportAccountMutation.mutate()}
-            fullWidth
-          />
-          <Button
-            label={t('clearAdvisorScanHistories')}
-            variant="secondary"
-            loading={clearHistoriesMutation.isPending}
-            onPress={() => Alert.alert(
-              'Clear histories?',
-              'This removes advisor and crop scan history from your account.',
-              [
-                { text: 'Cancel', style: 'cancel' },
-                { text: 'Clear', style: 'destructive', onPress: () => clearHistoriesMutation.mutate() },
-              ],
-            )}
-            fullWidth
-          />
-          <InputField
-            label="Password required to delete account"
-            value={deletePassword}
-            onChangeText={setDeletePassword}
-            secureTextEntry
-          />
-          <Button
-            label="Delete account"
-            variant="ghost"
-            disabled={!deletePassword}
-            loading={deleteAccountMutation.isPending}
-            onPress={() => Alert.alert(
-              'Delete account permanently?',
-              'Your AgroAide account and associated data will be scheduled for deletion.',
-              [
-                { text: 'Cancel', style: 'cancel' },
-                { text: 'Delete', style: 'destructive', onPress: () => deleteAccountMutation.mutate() },
-              ],
-            )}
-            fullWidth
-          />
+          <Row>
+            <Text variant="headline">{t('legalAndYourData')}</Text>
+            <Chip
+              label={showLegalSection ? 'Close' : 'Open'}
+              tone={showLegalSection ? 'danger' : 'info'}
+              onPress={() => setShowLegalSection(!showLegalSection)}
+            />
+          </Row>
+          {showLegalSection ? (
+            <View style={{ gap: 12 }}>
+              <Button label={t('privacyNotice')} variant="secondary" onPress={() => router.push('/privacy' as never)} fullWidth />
+              <Button label={t('termsOfUse')} variant="secondary" onPress={() => router.push('/terms' as never)} fullWidth />
+              <Button
+                label={t('exportMyData')}
+                variant="secondary"
+                loading={exportAccountMutation.isPending}
+                onPress={() => exportAccountMutation.mutate()}
+                fullWidth
+              />
+              <Surface
+                rounded="lg"
+                style={{ gap: 8, borderWidth: 1, borderColor: theme.colors.danger, backgroundColor: `${theme.colors.danger}0D` }}>
+                <Text variant="headline" tone="danger">Danger zone</Text>
+                <Text variant="caption" tone="muted">
+                  Keep your account unless you are completely sure. Deleting it permanently removes your farm records, scans, and account data.
+                </Text>
+                <Button
+                  label="Delete account permanently"
+                  onPress={() => setShowDeleteDialog(true)}
+                  style={{ backgroundColor: theme.colors.danger }}
+                  fullWidth
+                />
+              </Surface>
+            </View>
+          ) : null}
         </Section>
 
         <Button
@@ -780,6 +738,31 @@ export default function ProfileScreen() {
         />
       </Content>
       </KeyboardAvoidingView>
+      <ConfirmModal
+        visible={showDeleteDialog}
+        title="Delete your account permanently?"
+        message="This cannot be undone. You will lose your farm records, scans, history, and access to this account. We strongly recommend keeping your account."
+        confirmLabel="Delete permanently"
+        loading={deleteAccountMutation.isPending}
+        confirmDisabled={!deletePassword}
+        onCancel={() => {
+          setShowDeleteDialog(false);
+          setDeletePassword('');
+        }}
+        onConfirm={() => deleteAccountMutation.mutate()}>
+        <Surface
+          rounded="lg"
+          style={{ gap: 8, borderWidth: 1, borderColor: theme.colors.danger, backgroundColor: `${theme.colors.danger}0D` }}>
+          <Text variant="body" tone="danger">Danger: permanent account deletion</Text>
+          <InputField
+            label="Enter your password to continue"
+            value={deletePassword}
+            onChangeText={setDeletePassword}
+            secureTextEntry
+            autoComplete="current-password"
+          />
+        </Surface>
+      </ConfirmModal>
     </Screen>
   );
 }

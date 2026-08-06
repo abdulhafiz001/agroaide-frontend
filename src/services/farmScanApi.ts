@@ -54,6 +54,9 @@ export type ScanHistoryItem = {
   imagePath?: string | null;
   status?: ScanVerificationStatus;
   verificationStatus?: ScanVerificationStatus;
+  processingState?: 'queued' | 'processing' | 'completed' | 'failed';
+  verificationState?: string;
+  safeErrorCode?: string | null;
   verifiedAt?: string | null;
   feedback?: { accurate: boolean; reason?: string | null } | null;
 };
@@ -63,9 +66,32 @@ export type ScanDetail = ScanHistoryItem & {
   farmFieldId?: string | null;
 };
 
+function normalizeScanStatus(scan: ScanHistoryItem): ScanVerificationStatus {
+  if (scan.processingState === 'queued' || scan.processingState === 'processing' || scan.processingState === 'failed') {
+    return scan.processingState;
+  }
+
+  switch (scan.verificationState) {
+    case 'expert_verified':
+      return 'verified';
+    case 'needs_retake':
+      return 'rejected';
+    case 'pending_review':
+    case 'disputed':
+      return 'needs_review';
+    default:
+      return 'completed';
+  }
+}
+
+function normalizeScan<T extends ScanHistoryItem>(scan: T): T {
+  const status = normalizeScanStatus(scan);
+  return { ...scan, status, verificationStatus: status };
+}
+
 export const farmScanApi = {
-  analyzeImage(token: string, imageBase64: string, farmFieldId?: string) {
-    return apiRequest<{ scanId: string; status: ScanVerificationStatus; analysis?: ScanResult }>('/farm/analyze-image', {
+  async analyzeImage(token: string, imageBase64: string, farmFieldId?: string) {
+    const response = await apiRequest<{ scanId: string; scan: ScanDetail }>('/farm/scans', {
       method: 'POST',
       token,
       timeoutMs: 120000,
@@ -74,34 +100,42 @@ export const farmScanApi = {
         farmFieldId: farmFieldId ? parseInt(farmFieldId, 10) : undefined,
       },
     });
+    const scan = normalizeScan(response.scan);
+    return { scanId: response.scanId, status: scan.status!, analysis: scan.analysis };
   },
 
-  getHistory(token: string) {
-    return apiRequest<{ history: ScanHistoryItem[] }>('/farm/scan-history', {
+  async getHistory(token: string) {
+    const response = await apiRequest<{ history: ScanHistoryItem[] }>('/farm/scan-history', {
       method: 'GET',
       token,
     });
+    return { history: response.history.map(normalizeScan) };
   },
 
-  getScan(token: string, scanId: string) {
-    return apiRequest<{ scan: ScanDetail }>(`/farm/scan-history/${scanId}`, {
+  async getScan(token: string, scanId: string) {
+    const response = await apiRequest<{ scan: ScanDetail }>(`/farm/scans/${scanId}`, {
       method: 'GET',
       token,
     });
+    return { scan: normalizeScan(response.scan) };
   },
 
-  getScanStatus(token: string, scanId: string) {
-    return apiRequest<{ scan: ScanDetail }>(`/farm/scan-history/${scanId}/status`, {
+  async getScanStatus(token: string, scanId: string) {
+    const response = await apiRequest<{ scan: ScanDetail }>(`/farm/scans/${scanId}`, {
       method: 'GET',
       token,
     });
+    return { scan: normalizeScan(response.scan) };
   },
 
   submitFeedback(token: string, scanId: string, payload: { accurate: boolean; reason?: string }) {
-    return apiRequest<{ message: string; scan: ScanDetail }>(`/farm/scan-history/${scanId}/feedback`, {
+    return apiRequest<{ message: string; scan: ScanDetail }>(`/farm/scans/${scanId}/feedback`, {
       method: 'POST',
       token,
-      body: payload,
+      body: {
+        verdict: payload.accurate ? 'correct' : 'incorrect',
+        comment: payload.reason,
+      },
     });
   },
 };

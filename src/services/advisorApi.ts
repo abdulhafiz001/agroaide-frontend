@@ -10,7 +10,6 @@ export type AdvisorMessage = {
 export type AdvisorRequestPreferences = {
   detailLevel: 'concise' | 'balanced' | 'deep';
   tone: 'cautious' | 'balanced' | 'bold';
-  voiceTips: boolean;
   language: string;
 };
 

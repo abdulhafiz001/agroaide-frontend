@@ -24,6 +24,7 @@ import { Button, Chip, InputField, Surface, Text } from '@/design-system/compone
 import { ApiError } from '@/services/apiClient';
 import { authApi } from '@/services/authApi';
 import { clearAllSyncActions } from '@/services/syncQueue';
+import { PRIVACY_VERSION, TERMS_VERSION } from '@/legal/legalContent';
 import { useAppStore } from '@/store/useAppStore';
 import type { ExperienceLevel } from '@/types/farmer';
 import { isFarmProfileComplete } from '@/utils/farmProfile';
@@ -32,6 +33,7 @@ import { clearAuthQueryCache } from '@/utils/queryClient';
 import { authStorage } from '@/utils/authStorage';
 
 const LOCATIONIQ_KEY = process.env.EXPO_PUBLIC_LOCATIONIQ_KEY || '';
+const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 const Screen = styled(SafeAreaView)`
   flex: 1;
@@ -148,14 +150,18 @@ export default function RegisterScreen() {
   const [form, setForm] = useState<RegistrationForm>(initialForm);
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [emailValidationVisible, setEmailValidationVisible] = useState(false);
+  const [passwordValidationVisible, setPasswordValidationVisible] = useState(false);
   const legalVersionsQuery = useQuery({
     queryKey: ['legalVersions'],
     queryFn: () => authApi.getLegalVersions(),
     retry: 1,
     staleTime: 5 * 60 * 1000,
   });
-  const legalVersions = legalVersionsQuery.data;
-  const legalVersionsConfirmed = Boolean(legalVersions?.termsVersion && legalVersions?.privacyVersion);
+  const legalVersions = legalVersionsQuery.data ?? {
+    termsVersion: TERMS_VERSION,
+    privacyVersion: PRIVACY_VERSION,
+  };
 
   const [locationQuery, setLocationQuery] = useState('');
   const [locationResults, setLocationResults] = useState<LocationResult[]>([]);
@@ -263,9 +269,6 @@ export default function RegisterScreen() {
 
   const mutation = useMutation({
     mutationFn: () => {
-      if (!legalVersionsConfirmed || !legalVersions) {
-        throw new Error('Current legal terms could not be confirmed.');
-      }
       const irrigationAccess = irrigationOptions.includes(form.irrigationAccess as any)
         ? (form.irrigationAccess as (typeof irrigationOptions)[number])
         : 'drip';
@@ -324,7 +327,26 @@ export default function RegisterScreen() {
       form.fullName && form.email && form.password && form.passwordConfirmation && form.password === form.passwordConfirmation,
     );
   }, [form.fullName, form.email, form.password, form.passwordConfirmation]);
-  const canCreateAccount = form.acceptedTerms && form.acceptedPrivacy && legalVersionsConfirmed;
+  const emailIsValid = EMAIL_PATTERN.test(form.email.trim());
+  const passwordIsValid =
+    form.password.length >= 8
+    && /[A-Za-z]/.test(form.password)
+    && /\d/.test(form.password);
+  const canCreateAccount = form.acceptedTerms && form.acceptedPrivacy;
+
+  const continueFromAccountDetails = () => {
+    setEmailValidationVisible(true);
+    setPasswordValidationVisible(true);
+    if (!emailIsValid) {
+      toast.error('Check your email', 'Enter a complete email address, such as name@example.com.');
+      return;
+    }
+    if (!passwordIsValid) {
+      toast.error('Choose a stronger password', 'Use at least 8 characters with a letter and a number.');
+      return;
+    }
+    animateStep(2);
+  };
 
   const renderStepIndicator = () => (
     <StepRow>
@@ -340,9 +362,14 @@ export default function RegisterScreen() {
       <InputField
         label="Email address"
         value={form.email}
-        onChangeText={(t) => updateForm('email', t)}
+        onChangeText={(t) => {
+          updateForm('email', t);
+          if (emailValidationVisible) setEmailValidationVisible(false);
+        }}
         keyboardType="email-address"
         autoCapitalize="none"
+        autoComplete="email"
+        error={emailValidationVisible && !emailIsValid ? 'Enter a valid email address.' : undefined}
       />
       <InputField
         label="Phone number (optional)"
@@ -353,8 +380,15 @@ export default function RegisterScreen() {
       <InputField
         label="Password"
         value={form.password}
-        onChangeText={(t) => updateForm('password', t)}
+        onChangeText={(t) => {
+          updateForm('password', t);
+          if (passwordValidationVisible) setPasswordValidationVisible(false);
+        }}
         secureTextEntry={!showPassword}
+        autoComplete="new-password"
+        error={passwordValidationVisible && !passwordIsValid
+          ? 'Use at least 8 characters with a letter and a number.'
+          : undefined}
         rightElement={
           <Pressable
             onPress={() => setShowPassword((p) => !p)}
@@ -393,7 +427,7 @@ export default function RegisterScreen() {
       {form.passwordConfirmation && form.password !== form.passwordConfirmation ? (
         <Chip label="Passwords do not match" tone="danger" />
       ) : null}
-      <Button label="Next" onPress={() => animateStep(2)} fullWidth disabled={!canGoToStep2} />
+      <Button label="Next" onPress={continueFromAccountDetails} fullWidth disabled={!canGoToStep2} />
     </Card>
   );
 
@@ -523,47 +557,23 @@ export default function RegisterScreen() {
       )}
 
       <Surface variant="muted" rounded="lg" style={{ gap: 4 }}>
-        {legalVersionsQuery.isLoading ? (
-          <View
-            style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 8 }}
-            accessibilityLiveRegion="polite">
-            <ActivityIndicator size="small" color={theme.colors.primary} />
-            <Text variant="caption" tone="muted">Confirming the current terms and privacy notice…</Text>
-          </View>
-        ) : legalVersionsQuery.isError || !legalVersionsConfirmed ? (
-          <Surface variant="transparent" style={{ gap: 8, paddingVertical: 8 }}>
-            <Text variant="caption" tone="danger">
-              We could not confirm the current legal documents. Check your connection, then try again.
-            </Text>
-            <Button
-              label="Try again"
-              variant="secondary"
-              onPress={() => legalVersionsQuery.refetch()}
-              loading={legalVersionsQuery.isFetching}
-            />
-          </Surface>
-        ) : (
-          <Text variant="caption" tone="muted" style={{ paddingVertical: 4 }}>
-            Current terms and privacy notice confirmed.
-          </Text>
-        )}
         <ConsentRow
-          onPress={() => updateForm('acceptedTerms', !form.acceptedTerms)}
+          onPress={() => {
+            const accepted = !(form.acceptedTerms && form.acceptedPrivacy);
+            updateForm('acceptedTerms', accepted);
+            updateForm('acceptedPrivacy', accepted);
+          }}
           accessibilityRole="checkbox"
-          accessibilityState={{ checked: form.acceptedTerms }}>
-          <Ionicons name={form.acceptedTerms ? 'checkbox' : 'square-outline'} size={24} color={theme.colors.primary} />
+          accessibilityState={{ checked: form.acceptedTerms && form.acceptedPrivacy }}>
+          <Ionicons
+            name={form.acceptedTerms && form.acceptedPrivacy ? 'checkbox' : 'square-outline'}
+            size={24}
+            color={theme.colors.primary}
+          />
           <Text variant="caption" style={{ flex: 1 }}>
-            I accept the{' '}
-            <Text variant="caption" tone="accent" onPress={() => router.push('/terms' as never)}>terms of use</Text>.
-          </Text>
-        </ConsentRow>
-        <ConsentRow
-          onPress={() => updateForm('acceptedPrivacy', !form.acceptedPrivacy)}
-          accessibilityRole="checkbox"
-          accessibilityState={{ checked: form.acceptedPrivacy }}>
-          <Ionicons name={form.acceptedPrivacy ? 'checkbox' : 'square-outline'} size={24} color={theme.colors.primary} />
-          <Text variant="caption" style={{ flex: 1 }}>
-            I have read the{' '}
+            I agree to the{' '}
+            <Text variant="caption" tone="accent" onPress={() => router.push('/terms' as never)}>terms of use</Text>
+            {' '}and confirm that I have read the{' '}
             <Text variant="caption" tone="accent" onPress={() => router.push('/privacy' as never)}>privacy notice</Text>.
           </Text>
         </ConsentRow>

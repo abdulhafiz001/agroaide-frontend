@@ -1,4 +1,4 @@
-import { apiRequest, apiTextRequest } from '@/services/apiClient';
+import { apiRequest } from '@/services/apiClient';
 import type { FarmerProfile } from '@/types/farmer';
 
 export interface AuthResponse {
@@ -105,16 +105,10 @@ export const authApi = {
   },
 
   exportAccountData(token: string) {
-    return apiTextRequest('/privacy/export', {
+    return apiRequest<{ content: string; filename: string }>('/privacy/export', {
+      method: 'GET',
       token,
       timeoutMs: 90000,
-    });
-  },
-
-  clearHistories(token: string) {
-    return apiRequest<{ message: string }>('/privacy/histories', {
-      method: 'DELETE',
-      token,
     });
   },
 

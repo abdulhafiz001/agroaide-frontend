@@ -19,7 +19,6 @@ export type NotificationPreferences = {
 export type AiAdvisorPreference = {
   detailLevel: 'concise' | 'balanced' | 'deep';
   tone: 'cautious' | 'balanced' | 'bold';
-  voiceTips: boolean;
 };
 
 interface AppState {
@@ -66,7 +65,6 @@ export const useAppStore = create<AppState>()(
       aiAdvisorPreference: {
         detailLevel: 'balanced',
         tone: 'balanced',
-        voiceTips: false,
       },
       personalDataRevision: 0,
       completeOnboarding: () => set({ onboardingCompleted: true }),
@@ -99,10 +97,6 @@ export const useAppStore = create<AppState>()(
               profile.aiTone && ['cautious', 'balanced', 'bold'].includes(profile.aiTone)
                 ? profile.aiTone
                 : state.aiAdvisorPreference.tone,
-            voiceTips:
-              typeof profile.aiVoiceTips === 'boolean'
-                ? profile.aiVoiceTips
-                : state.aiAdvisorPreference.voiceTips,
           },
         })),
       updateFarmerProfile: (profile) =>
@@ -132,11 +126,16 @@ export const useAppStore = create<AppState>()(
     {
       name: 'agroaide-preferences-v2',
       storage: createJSONStorage(() => AsyncStorage),
-      version: 1,
+      version: 2,
       migrate: (persistedState) => {
         if (!persistedState || typeof persistedState !== 'object') return persistedState;
         const preferences = { ...(persistedState as Record<string, unknown>) };
         delete preferences.farmerProfile;
+        if (preferences.aiAdvisorPreference && typeof preferences.aiAdvisorPreference === 'object') {
+          const aiPreferences = { ...(preferences.aiAdvisorPreference as Record<string, unknown>) };
+          delete aiPreferences.voiceTips;
+          preferences.aiAdvisorPreference = aiPreferences;
+        }
         return preferences;
       },
       onRehydrateStorage: () => (state) => {
