@@ -4,11 +4,11 @@ import { useRouter } from 'expo-router';
 import React from 'react';
 import { ActivityIndicator, ScrollView, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useTheme } from 'styled-components/native';
+import styled, { useTheme } from '@/design-system/styled';
 
 import { MarketPriceChart } from '@/components/MarketPriceChart';
 import { Chip, Surface, Text } from '@/design-system/components';
-import styled from '@/design-system/styled';
+
 import { marketApi, type MarketPrice } from '@/services/marketApi';
 import { useAppStore } from '@/store/useAppStore';
 

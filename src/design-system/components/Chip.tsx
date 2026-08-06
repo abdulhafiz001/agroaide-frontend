@@ -13,6 +13,7 @@ interface ChipProps extends PressableProps {
 }
 
 const Container = styled.Pressable<{ tone: ChipTone }>`
+  min-height: 44px;
   flex-direction: row;
   align-items: center;
   padding: ${({ theme }) => `${theme.spacing.xs}px ${theme.spacing.sm}px`};
@@ -36,7 +37,11 @@ const Container = styled.Pressable<{ tone: ChipTone }>`
 
 export const Chip: React.FC<ChipProps> = ({ label, tone = 'default', icon, ...rest }) => {
   return (
-    <Container tone={tone} {...rest}>
+    <Container
+      tone={tone}
+      accessibilityRole={rest.onPress ? 'button' : 'text'}
+      accessibilityLabel={rest.accessibilityLabel ?? label}
+      {...rest}>
       {icon}
       <Text variant="caption" tone={tone === 'default' ? 'muted' : tone}>
         {label}

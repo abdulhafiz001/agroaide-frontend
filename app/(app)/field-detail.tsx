@@ -11,16 +11,16 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useTheme } from 'styled-components/native';
+import styled, { useTheme } from '@/design-system/styled';
 
 import { FarmMapView, type FarmMapViewHandle } from '@/components/FarmMapView';
 import { useToast } from '@/components/Toast';
 import { Button, Chip, InputField, Surface, Text } from '@/design-system/components';
-import styled from '@/design-system/styled';
 import { useTranslation } from '@/i18n/useTranslation';
 import { ApiError } from '@/services/apiClient';
 import { farmApi } from '@/services/farmApi';
 import { marketApi } from '@/services/marketApi';
+import { isOfflineQueuedError, withOfflineQueue } from '@/services/offlineQueue';
 import { useAppStore } from '@/store/useAppStore';
 import { formatAreaWithFt, formatNaira } from '@/utils/formatters';
 import { computeInputEstimate, type InputEstimateResult } from '@/utils/inputEstimate';
@@ -84,14 +84,28 @@ export default function FieldDetailScreen() {
   const cropPrice = cropMarket?.marketPrices?.[0];
 
   const clearBoundaryMutation = useMutation({
-    mutationFn: () => farmApi.clearBoundary(token, String(fieldId)),
+    mutationFn: () =>
+      withOfflineQueue({
+        actionType: 'boundary.delete',
+        runOnline: () => farmApi.clearBoundary(token, String(fieldId)),
+        buildPayload: () => ({ fieldId: Number(fieldId) }),
+      }),
     onSuccess: () => {
       setBoundaryMenu(false);
       queryClient.invalidateQueries({ queryKey: ['fieldDetail', fieldId] });
       queryClient.invalidateQueries({ queryKey: ['farmOverview'] });
       toast.success('Boundary removed', 'Walk a new boundary whenever you are ready.');
     },
-    onError: () => toast.error('Error', 'Could not remove boundary.'),
+    onError: (error) => {
+      if (isOfflineQueuedError(error)) {
+        setBoundaryMenu(false);
+        queryClient.invalidateQueries({ queryKey: ['fieldDetail', fieldId] });
+        queryClient.invalidateQueries({ queryKey: ['farmOverview'] });
+        toast.info('Queued offline', 'Boundary removal will sync when you reconnect.');
+        return;
+      }
+      toast.error('Error', 'Could not remove boundary.');
+    },
   });
 
   const estimateMutation = useMutation({
@@ -272,7 +286,7 @@ export default function FieldDetailScreen() {
                     ref={mapRef}
                     center={mapData.center}
                     polygon={mapData.polygon}
-                    farmName={mapData.farmName || summary?.farmName}
+                    farmName={summary?.farmName}
                     fields={mapData.fields ?? []}
                   />
                 </View>

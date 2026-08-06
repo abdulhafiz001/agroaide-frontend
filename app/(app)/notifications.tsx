@@ -4,10 +4,10 @@ import { useRouter } from 'expo-router';
 import React from 'react';
 import { ActivityIndicator, FlatList, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useTheme } from 'styled-components/native';
+import styled, { useTheme } from '@/design-system/styled';
 
-import { Button, Surface, Text } from '@/design-system/components';
-import styled from '@/design-system/styled';
+import { Button, Text } from '@/design-system/components';
+
 import { notificationApi, type AppNotification } from '@/services/notificationApi';
 import { useAppStore } from '@/store/useAppStore';
 import { routeForNotification } from '@/utils/notificationRouting';
@@ -192,7 +192,7 @@ export default function NotificationsScreen() {
             No notifications at this moment
           </Text>
           <Text variant="body" tone="muted" align="center">
-            We'll notify you about weather alerts, task reminders, and farming insights.
+            We&apos;ll notify you about weather alerts, task reminders, and farming insights.
           </Text>
           <Button label="Refresh" variant="outline" onPress={() => refetch()} />
         </EmptyState>

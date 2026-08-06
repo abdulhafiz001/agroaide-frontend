@@ -10,28 +10,27 @@ import { createClientUuid } from '@/utils/geoArea';
  * Respects Settings → Offline sync toggle.
  */
 export async function withOfflineQueue<T>(opts: {
-  runOnline: (clientUuid: string) => Promise<T>;
+  runOnline: (clientUuid: string, clientTimestamp: string) => Promise<T>;
   actionType: SyncActionType;
   buildPayload: (clientUuid: string) => Record<string, unknown>;
-  /** Reuse uuid for updates/deletes that already have a server id */
-  uuid?: string;
 }): Promise<T> {
-  const clientUuid = opts.uuid ?? createClientUuid();
+  const actionUuid = createClientUuid();
+  const clientUuid = createClientUuid();
   const clientTimestamp = new Date().toISOString();
 
   try {
-    return await opts.runOnline(clientUuid);
+    return await opts.runOnline(clientUuid, clientTimestamp);
   } catch (error) {
     if (!useAppStore.getState().offlineModeEnabled) {
       throw error;
     }
     await enqueueSyncAction({
-      uuid: clientUuid,
+      uuid: actionUuid,
       clientTimestamp,
       actionType: opts.actionType,
       payload: {
         ...opts.buildPayload(clientUuid),
-        clientUuid,
+        ...(opts.actionType.endsWith('.create') ? { clientUuid } : {}),
         clientTimestamp,
       },
     });

@@ -6,6 +6,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useMemo, useState } from 'react';
 import {
   ActivityIndicator,
+  Alert,
   KeyboardAvoidingView,
   Modal,
   Platform,
@@ -14,16 +15,14 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useTheme } from 'styled-components/native';
+import styled, { useTheme } from '@/design-system/styled';
 
 import { useToast } from '@/components/Toast';
 import { Button, Chip, InputField, Surface, Text } from '@/design-system/components';
-import styled from '@/design-system/styled';
 import { farmApi, type FieldTransaction } from '@/services/farmApi';
-import { enqueueSyncAction } from '@/services/syncQueue';
+import { isOfflineQueuedError, withOfflineQueue } from '@/services/offlineQueue';
 import { useAppStore } from '@/store/useAppStore';
 import { formatAreaWithFt, formatNaira } from '@/utils/formatters';
-import { createClientUuid } from '@/utils/geoArea';
 
 const Screen = styled(SafeAreaView)`
   flex: 1;
@@ -73,6 +72,7 @@ export default function FieldFinancesScreen() {
   const [categoryOther, setCategoryOther] = useState('');
   const [note, setNote] = useState('');
   const [occurredOn, setOccurredOn] = useState(new Date().toISOString().slice(0, 10));
+  const [editingTransaction, setEditingTransaction] = useState<FieldTransaction | null>(null);
 
   const economicsQuery = useQuery({
     queryKey: ['fieldEconomics', fieldId],
@@ -100,11 +100,24 @@ export default function FieldFinancesScreen() {
     setNote('');
     setType('EXPENSE');
     setCategory('SEED');
+    setEditingTransaction(null);
+  };
+
+  const editTransaction = (transaction: FieldTransaction) => {
+    setEditingTransaction(transaction);
+    setType(transaction.type);
+    setCategory(transaction.category);
+    setAmount(String(transaction.amount));
+    setQuantity(transaction.quantity == null ? '' : String(transaction.quantity));
+    setSaleItem(transaction.saleItem ?? '');
+    setCategoryOther(transaction.categoryOther ?? '');
+    setOccurredOn(transaction.occurredOn);
+    setNote(transaction.note ?? '');
+    setShowModal(true);
   };
 
   const createMutation = useMutation({
     mutationFn: async () => {
-      const clientUuid = createClientUuid();
       const payload = {
         type,
         category,
@@ -114,36 +127,55 @@ export default function FieldFinancesScreen() {
         categoryOther: category === 'OTHER' ? categoryOther.trim() || undefined : undefined,
         occurredOn,
         note: note || undefined,
-        clientUuid,
       };
-      try {
-        return await farmApi.createTransaction(token, String(fieldId), payload);
-      } catch (error: any) {
-        if (useAppStore.getState().offlineModeEnabled) {
-          await enqueueSyncAction({
-            uuid: clientUuid,
-            clientTimestamp: new Date().toISOString(),
-            actionType: 'transaction.create',
-            payload: { ...payload, farmFieldId: Number(fieldId) },
-          });
-        }
-        throw error;
+      if (editingTransaction) {
+        return withOfflineQueue({
+          actionType: 'transaction.update',
+          runOnline: () => farmApi.updateTransaction(token, editingTransaction.id, payload),
+          buildPayload: () => ({ ...payload, id: editingTransaction.id, farmFieldId: Number(fieldId) }),
+        });
       }
+      return withOfflineQueue({
+        actionType: 'transaction.create',
+        runOnline: (clientUuid) => farmApi.createTransaction(token, String(fieldId), { ...payload, clientUuid }),
+        buildPayload: () => ({ ...payload, farmFieldId: Number(fieldId) }),
+      });
     },
     onSuccess: () => {
       invalidate();
       setShowModal(false);
       resetForm();
-      toast.success('Saved', 'Transaction added.');
+      toast.success('Saved', editingTransaction ? 'Transaction updated.' : 'Transaction added.');
     },
-    onError: () => {
+    onError: (error) => {
       invalidate();
       setShowModal(false);
-      if (useAppStore.getState().offlineModeEnabled) {
+      if (isOfflineQueuedError(error)) {
         toast.info('Queued offline', 'Transaction will sync when you reconnect.');
       } else {
         toast.error('Could not save', 'Check your connection and try again.');
       }
+    },
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: (transactionId: string) =>
+      withOfflineQueue({
+        actionType: 'transaction.delete',
+        runOnline: () => farmApi.deleteTransaction(token, transactionId),
+        buildPayload: () => ({ id: transactionId, transactionId, farmFieldId: Number(fieldId) }),
+      }),
+    onSuccess: () => {
+      invalidate();
+      toast.success('Deleted', 'Transaction removed.');
+    },
+    onError: (error) => {
+      invalidate();
+      if (isOfflineQueuedError(error)) {
+        toast.info('Queued offline', 'Transaction removal will sync when you reconnect.');
+        return;
+      }
+      toast.error('Could not delete', 'Check your connection and try again.');
     },
   });
 
@@ -228,7 +260,7 @@ export default function FieldFinancesScreen() {
             {fieldName || `Field #${fieldId}`}
           </Text>
         </View>
-        <Chip label="+ Add" tone="success" onPress={() => setShowModal(true)} />
+        <Chip label="+ Add" tone="success" onPress={() => { resetForm(); setShowModal(true); }} />
       </View>
 
       <Container>
@@ -311,6 +343,19 @@ export default function FieldFinancesScreen() {
                 {tx.quantity != null ? ` · qty ${tx.quantity}` : ''}
               </Text>
               {tx.note ? <Text variant="caption">{tx.note}</Text> : null}
+              <View style={{ flexDirection: 'row', gap: 8 }}>
+                <Button label="Edit" variant="secondary" onPress={() => editTransaction(tx)} style={{ flex: 1 }} />
+                <Button
+                  label="Delete"
+                  variant="ghost"
+                  style={{ flex: 1 }}
+                  loading={deleteMutation.isPending}
+                  onPress={() => Alert.alert('Delete transaction?', 'This entry will be removed.', [
+                    { text: 'Cancel', style: 'cancel' },
+                    { text: 'Delete', style: 'destructive', onPress: () => deleteMutation.mutate(tx.id) },
+                  ])}
+                />
+              </View>
             </Surface>
           ))
         )}
@@ -322,7 +367,7 @@ export default function FieldFinancesScreen() {
             <ModalContent>
               <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
                 <View style={{ gap: 12 }}>
-                  <Text variant="headline">Add transaction</Text>
+                  <Text variant="headline">{editingTransaction ? 'Edit transaction' : 'Add transaction'}</Text>
                   <View style={{ flexDirection: 'row', gap: 8 }}>
                     {(['EXPENSE', 'INCOME'] as const).map((t) => (
                       <Chip

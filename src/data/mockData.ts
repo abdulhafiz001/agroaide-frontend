@@ -16,6 +16,7 @@ export const defaultFarmerProfile: FarmerProfile = {
   irrigationAccess: 'drip',
   avatarColor: '#f97316',
   preferredTheme: 'light',
+  preferredLanguage: 'en',
 };
 
 export const weatherForecast = [

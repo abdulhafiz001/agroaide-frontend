@@ -13,12 +13,12 @@ import {
 } from 'react-native';
 import { FarmMapView, type FarmMapViewHandle } from '@/components/FarmMapView';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useTheme } from 'styled-components/native';
+import styled, { useTheme } from '@/design-system/styled';
 
 import { ConfirmModal } from '@/components/ConfirmModal';
 import { useToast } from '@/components/Toast';
 import { Button, Chip, InputField, Surface, Text } from '@/design-system/components';
-import styled from '@/design-system/styled';
+
 import { useTranslation } from '@/i18n/useTranslation';
 import { farmApi, type FarmField, type JournalEntry } from '@/services/farmApi';
 import { isOfflineQueuedError, withOfflineQueue } from '@/services/offlineQueue';
@@ -121,7 +121,7 @@ export default function FarmScreen() {
 
   const profileCrops = profile?.crops?.filter(Boolean) ?? [];
 
-  const { data, isLoading, refetch } = useQuery({
+  const { data, isLoading } = useQuery({
     queryKey: ['farmOverview'],
     queryFn: () => farmApi.getOverview(token),
     enabled: Boolean(token),
@@ -248,19 +248,45 @@ export default function FarmScreen() {
   });
 
   const updateJournalMutation = useMutation({
-    mutationFn: () => farmApi.updateJournalEntry(token, editingEntry!.id, { note: journalNote, type: journalType }),
+    mutationFn: () =>
+      withOfflineQueue({
+        actionType: 'journal.update',
+        runOnline: () => farmApi.updateJournalEntry(token, editingEntry!.id, { note: journalNote, type: journalType }),
+        buildPayload: () => ({ id: editingEntry!.id, note: journalNote, type: journalType }),
+      }),
     onSuccess: () => { invalidate(); closeJournalModal(); },
-    onError: () => toast.error('Error', 'Could not update entry.'),
+    onError: (error) => {
+      if (isOfflineQueuedError(error)) {
+        invalidate();
+        closeJournalModal();
+        toast.info('Saved offline', 'Journal update will sync when you reconnect.');
+        return;
+      }
+      toast.error('Error', 'Could not update entry.');
+    },
   });
 
   const deleteJournalMutation = useMutation({
-    mutationFn: (id: string) => farmApi.deleteJournalEntry(token, id),
+    mutationFn: (id: string) =>
+      withOfflineQueue({
+        actionType: 'journal.delete',
+        runOnline: () => farmApi.deleteJournalEntry(token, id),
+        buildPayload: () => ({ id }),
+      }),
     onSuccess: () => {
       invalidate();
       setDeleteTarget(null);
       toast.success('Deleted', 'Journal entry removed.');
     },
-    onError: () => toast.error('Error', 'Could not delete entry.'),
+    onError: (error) => {
+      if (isOfflineQueuedError(error)) {
+        invalidate();
+        setDeleteTarget(null);
+        toast.info('Queued offline', 'Journal delete will sync when you reconnect.');
+        return;
+      }
+      toast.error('Error', 'Could not delete entry.');
+    },
   });
 
   const openAddField = () => {
@@ -385,6 +411,8 @@ export default function FarmScreen() {
                         params: { fieldId: field.id, fieldName: field.name },
                       })
                     }
+                    accessibilityRole="button"
+                    accessibilityLabel={`Open ${field.name}`}
                   >
                     <Text variant="headline">{field.name}</Text>
                     <Text variant="caption" tone="muted">
@@ -400,19 +428,29 @@ export default function FarmScreen() {
                         })
                       }
                       style={{ backgroundColor: `${theme.colors.primary}18`, borderRadius: 14, padding: 4 }}
+                      accessibilityRole="button"
+                      accessibilityLabel={`View ${field.name}`}
                     >
                       <Ionicons name="eye-outline" size={20} color={theme.colors.primary} />
                     </TouchableOpacity>
                     <TouchableOpacity
                       onPress={() => router.push({ pathname: '/farm-scan', params: { fieldId: field.id, fieldName: field.name, fieldCrop: field.crop } })}
                       style={{ backgroundColor: `${theme.colors.accent}20`, borderRadius: 14, padding: 4 }}
+                      accessibilityRole="button"
+                      accessibilityLabel={`Scan ${field.name}`}
                     >
                       <Ionicons name="scan" size={20} color={theme.colors.accent} />
                     </TouchableOpacity>
-                    <TouchableOpacity onPress={() => openEditField(field)}>
+                    <TouchableOpacity
+                      onPress={() => openEditField(field)}
+                      accessibilityRole="button"
+                      accessibilityLabel={`Edit ${field.name}`}>
                       <Ionicons name="create-outline" size={20} color={theme.colors.primary} />
                     </TouchableOpacity>
-                    <TouchableOpacity onPress={() => confirmDelete('field', field.id, field.name)}>
+                    <TouchableOpacity
+                      onPress={() => confirmDelete('field', field.id, field.name)}
+                      accessibilityRole="button"
+                      accessibilityLabel={`Delete ${field.name}`}>
                       <Ionicons name="trash-outline" size={20} color="#e63946" />
                     </TouchableOpacity>
                   </View>
@@ -520,10 +558,13 @@ export default function FarmScreen() {
       </Container>
 
       <FABContainer>
-        <ScanFAB onPress={() => router.push('/farm-scan')}>
+        <ScanFAB
+          onPress={() => router.push('/farm-scan')}
+          accessibilityRole="button"
+          accessibilityLabel="Scan crop health">
           <Ionicons name="scan" size={26} color="#fff" />
         </ScanFAB>
-        <FAB onPress={openAddField}>
+        <FAB onPress={openAddField} accessibilityRole="button" accessibilityLabel="Add farm field">
           <Ionicons name="add" size={28} color="#fff" />
         </FAB>
       </FABContainer>

@@ -18,7 +18,13 @@ export default function AppDrawerLayout() {
           backgroundColor: theme.colors.surface,
         },
       }}>
-      <Drawer.Screen name="(tabs)" options={{ title: 'Home' }} />
+      <Drawer.Screen
+        name="(tabs)"
+        options={{
+          title: 'Home',
+          headerShown: false,
+        }}
+      />
       <Drawer.Screen name="weather-detail" options={{ title: 'Weather Intelligence' }} />
       <Drawer.Screen name="farm-scan" options={{ title: 'Crop Scanner', drawerItemStyle: { display: 'none' } }} />
       <Drawer.Screen name="walk-boundary" options={{ title: 'Walk Boundary', drawerItemStyle: { display: 'none' } }} />
@@ -27,7 +33,7 @@ export default function AppDrawerLayout() {
       <Drawer.Screen name="notification-detail" options={{ title: 'Notification', drawerItemStyle: { display: 'none' } }} />
       <Drawer.Screen name="market" options={{ title: 'Market', drawerItemStyle: { display: 'none' } }} />
       <Drawer.Screen name="outbreak-map" options={{ title: 'Disease Map', drawerItemStyle: { display: 'none' } }} />
-      <Drawer.Screen name="notifications" options={{ title: 'Notifications', drawerItemStyle: { display: 'none' } }} />
+      <Drawer.Screen name="notifications" options={{ title: 'Notifications' }} />
       <Drawer.Screen name="settings" options={{ title: 'Settings & Profile' }} />
     </Drawer>
   );

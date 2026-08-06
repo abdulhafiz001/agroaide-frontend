@@ -14,16 +14,22 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useTheme } from 'styled-components/native';
+import styled, { useTheme } from '@/design-system/styled';
 
 import { AuthenticatedImage } from '@/components/AuthenticatedImage';
 import { useToast } from '@/components/Toast';
-import { Button, Chip, Surface, Text } from '@/design-system/components';
-import styled from '@/design-system/styled';
+import { Button, Chip, InputField, Surface, Text } from '@/design-system/components';
+
 import { farmApi } from '@/services/farmApi';
 import { farmScanApi, type ScanHistoryItem, type ScanResult } from '@/services/farmScanApi';
 import { useAppStore } from '@/store/useAppStore';
 import { useTranslation } from '@/i18n/useTranslation';
+import {
+  canPollScan,
+  getScanStatusMessage,
+  normalizeFeedbackReason,
+  type ScanVerificationStatus,
+} from '@/utils/scanStatus';
 
 const Screen = styled(SafeAreaView)`
   flex: 1;
@@ -148,13 +154,29 @@ export default function FarmScanScreen() {
     scanId?: string;
   }>();
   const token = useAppStore((s) => s.accessToken) ?? '';
+  const personalDataRevision = useAppStore((s) => s.personalDataRevision);
 
   const [imageUri, setImageUri] = useState<string | null>(null);
   const [imageBase64, setImageBase64] = useState<string | null>(null);
   const [result, setResult] = useState<ScanResult | null>(null);
   const [scanId, setScanId] = useState<string | null>(null);
+  const [scanStatus, setScanStatus] = useState<ScanVerificationStatus | null>(null);
+  const [feedbackReason, setFeedbackReason] = useState('');
   const [showHistory, setShowHistory] = useState(false);
   const [selectedFieldId, setSelectedFieldId] = useState<string | undefined>(params.fieldId);
+  const [seenPersonalDataRevision, setSeenPersonalDataRevision] = useState(personalDataRevision);
+
+  useEffect(() => {
+    if (seenPersonalDataRevision === personalDataRevision) return;
+    setSeenPersonalDataRevision(personalDataRevision);
+    setImageUri(null);
+    setImageBase64(null);
+    setResult(null);
+    setScanId(null);
+    setScanStatus(null);
+    setFeedbackReason('');
+    setShowHistory(false);
+  }, [personalDataRevision, seenPersonalDataRevision]);
 
   const { data: farmData } = useQuery({
     queryKey: ['farmOverview'],
@@ -176,6 +198,7 @@ export default function FarmScanScreen() {
         const response = await farmScanApi.getScan(token, id);
         const scan = response.scan;
         setScanId(scan.id);
+        setScanStatus(scan.verificationStatus ?? scan.status ?? 'completed');
         setResult(scan.analysis);
         setImageUri(scan.imagePath ?? null);
         setImageBase64(null);
@@ -200,13 +223,45 @@ export default function FarmScanScreen() {
       return farmScanApi.analyzeImage(token, imageBase64, selectedFieldId);
     },
     onSuccess: (data) => {
-      setResult(data.analysis);
+      setResult(data.analysis ?? null);
       setScanId(data.scanId ?? null);
+      setScanStatus(data.status ?? (data.analysis ? 'completed' : 'queued'));
       queryClient.invalidateQueries({ queryKey: ['scanHistory'] });
     },
     onError: (error: Error) => {
       toast.error('Scan failed', error.message || 'Could not analyze the image. Please try again.');
     },
+  });
+
+  const statusQuery = useQuery({
+    queryKey: ['farmScan', scanId, 'status'],
+    queryFn: () => farmScanApi.getScanStatus(token, scanId!),
+    enabled: Boolean(token && scanId && scanStatus && canPollScan(scanStatus)),
+    refetchInterval: (query) => {
+      const status = query.state.data?.scan.verificationStatus ?? query.state.data?.scan.status ?? scanStatus;
+      return status && canPollScan(status) ? 3000 : false;
+    },
+  });
+
+  useEffect(() => {
+    const scan = statusQuery.data?.scan;
+    if (!scan) return;
+    setScanStatus(scan.verificationStatus ?? scan.status ?? 'completed');
+    if (scan.analysis) setResult(scan.analysis);
+  }, [statusQuery.data?.scan]);
+
+  const feedbackMutation = useMutation({
+    mutationFn: (accurate: boolean) =>
+      farmScanApi.submitFeedback(token, scanId!, {
+        accurate,
+        reason: normalizeFeedbackReason(feedbackReason),
+      }),
+    onSuccess: () => {
+      toast.success('Thank you', 'Your feedback will help verify crop scan results.');
+      setFeedbackReason('');
+      queryClient.invalidateQueries({ queryKey: ['scanHistory'] });
+    },
+    onError: () => toast.error('Could not send feedback', 'Please try again.'),
   });
 
   const pickImage = useCallback(
@@ -261,6 +316,8 @@ export default function FarmScanScreen() {
     setImageBase64(null);
     setResult(null);
     setScanId(null);
+    setScanStatus(null);
+    setFeedbackReason('');
   };
 
   const askAdvisorAboutScan = () => {
@@ -279,7 +336,11 @@ export default function FarmScanScreen() {
   return (
     <Screen>
       <Header style={{ backgroundColor: theme.colors.primary }}>
-        <TouchableOpacity onPress={() => router.back()} hitSlop={12}>
+        <TouchableOpacity
+          onPress={() => router.back()}
+          hitSlop={12}
+          accessibilityRole="button"
+          accessibilityLabel="Go back">
           <Ionicons name="arrow-back" size={26} color="#fff" />
         </TouchableOpacity>
         <Ionicons name="scan" size={22} color="#fff" />
@@ -289,6 +350,8 @@ export default function FarmScanScreen() {
         <TouchableOpacity
           onPress={() => setShowHistory(true)}
           hitSlop={12}
+          accessibilityRole="button"
+          accessibilityLabel="Open scan history"
           style={{
             width: 40,
             height: 40,
@@ -326,7 +389,13 @@ export default function FarmScanScreen() {
           </ScrollView>
         </Surface>
 
-        <ImagePickerArea onPress={showImageSourcePicker} activeOpacity={0.7} disabled={isAnalyzing}>
+        <ImagePickerArea
+          onPress={showImageSourcePicker}
+          activeOpacity={0.7}
+          disabled={isAnalyzing}
+          accessibilityRole="button"
+          accessibilityLabel={imageUri ? 'Change crop image' : 'Choose a crop image'}
+          accessibilityState={{ disabled: isAnalyzing }}>
           {imageUri ? (
             <>
               {imageUri.startsWith('file:') ||
@@ -398,6 +467,22 @@ export default function FarmScanScreen() {
             />
           </View>
         )}
+
+        {scanStatus ? (
+          <Surface rounded="lg" variant="muted" style={{ marginTop: 12, gap: 6 }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+              {canPollScan(scanStatus) ? <ActivityIndicator size="small" color={theme.colors.primary} /> : null}
+              <Text variant="headline" accessibilityLiveRegion="polite">
+                {getScanStatusMessage(scanStatus)}
+              </Text>
+            </View>
+            {canPollScan(scanStatus) ? (
+              <Text variant="caption" tone="muted">
+                This page checks automatically. You can leave and return from scan history.
+              </Text>
+            ) : null}
+          </Surface>
+        ) : null}
 
         {result && cfg && (
           <View style={{ gap: 0 }}>
@@ -533,13 +618,38 @@ export default function FarmScanScreen() {
             ) : null}
 
             {scanId ? (
-              <Button
-                label="Enquire more details"
-                icon={<Ionicons name="chatbubble-ellipses" size={18} color="#fff" />}
-                onPress={askAdvisorAboutScan}
-                style={{ marginTop: 20 }}
-                fullWidth
-              />
+              <>
+                <Surface rounded="lg" variant="muted" style={{ marginTop: 20, gap: 10 }}>
+                  <Text variant="headline">Was this scan accurate?</Text>
+                  <InputField
+                    label="Optional note"
+                    value={feedbackReason}
+                    onChangeText={setFeedbackReason}
+                    placeholder="Tell us what looked wrong"
+                  />
+                  <View style={{ flexDirection: 'row', gap: 8 }}>
+                    <Button
+                      label="Yes"
+                      variant="secondary"
+                      onPress={() => feedbackMutation.mutate(true)}
+                      style={{ flex: 1 }}
+                    />
+                    <Button
+                      label="Needs review"
+                      variant="secondary"
+                      onPress={() => feedbackMutation.mutate(false)}
+                      style={{ flex: 1 }}
+                    />
+                  </View>
+                </Surface>
+                <Button
+                  label="Enquire more details"
+                  icon={<Ionicons name="chatbubble-ellipses" size={18} color="#fff" />}
+                  onPress={askAdvisorAboutScan}
+                  style={{ marginTop: 12 }}
+                  fullWidth
+                />
+              </>
             ) : null}
 
             <Button
@@ -573,7 +683,11 @@ export default function FarmScanScreen() {
           <HistorySheet>
             <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
               <Text variant="headline">Scan history</Text>
-              <TouchableOpacity onPress={() => setShowHistory(false)} hitSlop={10}>
+              <TouchableOpacity
+                onPress={() => setShowHistory(false)}
+                hitSlop={10}
+                accessibilityRole="button"
+                accessibilityLabel="Close scan history">
                 <Ionicons name="close" size={22} color={theme.colors.textSecondary} />
               </TouchableOpacity>
             </View>
@@ -594,7 +708,12 @@ export default function FarmScanScreen() {
                   {history.map((item: ScanHistoryItem) => {
                     const itemCfg = conditionConfig[item.condition] || conditionConfig.unknown;
                     return (
-                      <TouchableOpacity key={item.id} onPress={() => loadScan(item.id)} activeOpacity={0.8}>
+                      <TouchableOpacity
+                        key={item.id}
+                        onPress={() => loadScan(item.id)}
+                        activeOpacity={0.8}
+                        accessibilityRole="button"
+                        accessibilityLabel={`Open scan from ${new Date(item.date).toLocaleDateString()}`}>
                         <Surface rounded="xl" style={{ flexDirection: 'row', gap: 12, alignItems: 'center' }}>
                           {item.imagePath ? (
                             <AuthenticatedImage

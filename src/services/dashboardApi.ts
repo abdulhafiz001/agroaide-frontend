@@ -47,13 +47,13 @@ export type DashboardSnapshotResponse = {
     condition?: string;
     icon?: string;
   };
-  outbreakAlerts?: Array<{
+  outbreakAlerts?: {
     id: string;
     title: string;
     message: string;
     data?: Record<string, unknown>;
     createdAt?: string;
-  }>;
+  }[];
 };
 
 export const dashboardApi = {

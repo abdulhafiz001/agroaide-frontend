@@ -9,13 +9,13 @@ import {
 } from '@/services/syncQueue';
 
 export type SyncDeltaResult = {
-  results: Array<{
+  results: {
     uuid: string;
     status: 'applied' | 'conflict' | 'rejected' | 'duplicate';
     serverEntity?: unknown;
     conflict?: unknown;
     message?: string;
-  }>;
+  }[];
 };
 
 export const syncApi = {

@@ -4,24 +4,22 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useTheme } from 'styled-components/native';
+import styled, { useTheme } from '@/design-system/styled';
 
 import { LeafletMap } from '@/components/LeafletMap';
 import { useToast } from '@/components/Toast';
 import { Button, Surface, Text } from '@/design-system/components';
-import styled from '@/design-system/styled';
 import { farmApi } from '@/services/farmApi';
+import { isOfflineQueuedError, withOfflineQueue } from '@/services/offlineQueue';
 import { useAppStore } from '@/store/useAppStore';
 import { formatAreaM2 } from '@/utils/formatters';
 import {
-  createClientUuid,
   filterGpsStream,
   type GpsPoint,
   haversineMeters,
   pointsToGeoJsonPolygon,
   sphericalPolygonAreaM2,
 } from '@/utils/geoArea';
-import { enqueueSyncAction } from '@/services/syncQueue';
 
 const Screen = styled(SafeAreaView)`
   flex: 1;
@@ -114,34 +112,27 @@ export default function WalkBoundaryScreen() {
 
     const areaM2 = Math.round(sphericalPolygonAreaM2(closed) * 100) / 100;
     const geojson = pointsToGeoJsonPolygon(closed);
-    const clientUuid = createClientUuid();
-    const clientTimestamp = new Date().toISOString();
-
     setSaving(true);
     try {
-      await farmApi.updateBoundary(token, String(fieldId), {
-        geojson,
-        areaM2,
-        clientUuid,
-        clientTimestamp,
+      await withOfflineQueue({
+        actionType: 'boundary.update',
+        runOnline: (clientUuid, clientTimestamp) =>
+          farmApi.updateBoundary(token, String(fieldId), {
+            geojson,
+            areaM2,
+            clientUuid,
+            clientTimestamp,
+          }),
+        buildPayload: () => ({ fieldId: Number(fieldId), geojson, areaM2 }),
       });
       toast.success('Boundary saved', formatAreaM2(areaM2));
       router.back();
-    } catch (error: any) {
-      if (useAppStore.getState().offlineModeEnabled) {
-        await enqueueSyncAction({
-          uuid: clientUuid,
-          clientTimestamp,
-          actionType: 'boundary.update',
-          payload: { fieldId: Number(fieldId), geojson, areaM2, clientUuid, clientTimestamp },
-        });
-        toast.info(
-          'Saved offline',
-          error?.message ? `Will sync when you reconnect. (${error.message})` : 'Will sync when you reconnect.',
-        );
+    } catch (error) {
+      if (isOfflineQueuedError(error)) {
+        toast.info('Saved offline', 'Boundary will sync when you reconnect.');
         router.back();
       } else {
-        toast.error('Could not save', error?.message || 'Check your connection and try again.');
+        toast.error('Could not save', error instanceof Error ? error.message : 'Check your connection and try again.');
       }
     } finally {
       setSaving(false);
@@ -151,7 +142,7 @@ export default function WalkBoundaryScreen() {
   return (
     <Screen edges={['top', 'bottom']}>
       <View style={{ paddingHorizontal: 16, paddingTop: 8, flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-        <Ionicons name="arrow-back" size={24} color={theme.colors.text} onPress={() => router.back()} />
+        <Ionicons name="arrow-back" size={24} color={theme.colors.textPrimary} onPress={() => router.back()} />
         <View style={{ flex: 1 }}>
           <Text variant="headline">Walk the perimeter</Text>
           <Text variant="caption" tone="muted">

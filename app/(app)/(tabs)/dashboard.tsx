@@ -1,4 +1,3 @@
-import { LinearGradient } from 'expo-linear-gradient';
 import {
     AlertTriangle,
     ArrowRight,
@@ -18,25 +17,27 @@ import {
     Thermometer,
     Wind,
 } from 'lucide-react-native';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery , useMutation, useQueryClient } from '@tanstack/react-query';
 import React, { useState } from 'react';
 import { ActivityIndicator, KeyboardAvoidingView, Modal, Platform, ScrollView, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import { useTheme } from 'styled-components/native';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import styled, { useTheme } from '@/design-system/styled';
+
 
 import { useToast } from '@/components/Toast';
 import { isOfflineQueuedError, withOfflineQueue } from '@/services/offlineQueue';
 import { Button, Chip, InputField, ProgressDonut, Surface, Text } from '@/design-system/components';
-import styled from '@/design-system/styled';
+
 import { dashboardApi } from '@/services/dashboardApi';
 import { farmApi, type FarmField } from '@/services/farmApi';
 import { marketApi, type MarketPrice } from '@/services/marketApi';
 import { ApiError } from '@/services/apiClient';
 import { useAppStore } from '@/store/useAppStore';
 import { useTranslation } from '@/i18n/useTranslation';
+import { clearAllSyncActions } from '@/services/syncQueue';
 import { clearAuthQueryCache } from '@/utils/queryClient';
+import { authStorage } from '@/utils/authStorage';
 import { isFarmProfileComplete } from '@/utils/farmProfile';
 import { formatAreaWithFt } from '@/utils/formatters';
 
@@ -242,7 +243,11 @@ export default function Dashboard() {
             <Button
               label={t('signInAgain')}
               variant="secondary"
-              onPress={() => {
+              onPress={async () => {
+                await Promise.all([
+                  authStorage.clearToken().catch(() => {}),
+                  clearAllSyncActions().catch(() => {}),
+                ]);
                 clearAuthQueryCache();
                 signOut();
                 router.replace('/auth/login');
@@ -312,7 +317,12 @@ export default function Dashboard() {
 
               <Text variant="display">{user.name}</Text>
             </View>
-            <TouchableOpacity style={{ padding: 10 }} onPress={() => router.push('/(app)/notifications')}>
+            <TouchableOpacity
+              style={{ padding: 10 }}
+              onPress={() => router.push('/(app)/notifications')}
+              accessibilityRole="button"
+              accessibilityLabel="Open notifications"
+              accessibilityState={{ busy: false }}>
               <Bell size={24} color={theme.colors.textPrimary} />
               {unreadNotifications > 0 && (
                 <View
@@ -335,7 +345,7 @@ export default function Dashboard() {
         </Header>
 
         {weatherAlert ? (
-          <LinearGradient colors={weatherAlert.gradient} style={{ borderRadius: 28, padding: 24, marginTop: 8 }}>
+          <View style={{ borderRadius: 28, padding: 24, marginTop: 8, backgroundColor: weatherAlert.gradient[0] }}>
             <Badge tone="warning">
               <Text variant="caption" tone="inverse">{weatherAlert.severity} {t('alertLabel')}</Text>
             </Badge>
@@ -344,7 +354,7 @@ export default function Dashboard() {
               <Text variant="body" tone="inverse">{weatherAlert.advice}</Text>
             </View>
             <AlertTriangle size={96} color="#ffffff55" style={{ position: 'absolute', right: 20, top: 12 }} />
-          </LinearGradient>
+          </View>
         ) : null}
 
         {outbreakAlerts.length > 0 && (
@@ -624,34 +634,46 @@ export default function Dashboard() {
         </Section>
 
         <Section>
-          <Text variant="headline">{t('forecast')}</Text>
+          <TouchableOpacity
+            onPress={() => router.push('/(app)/weather-detail')}
+            accessibilityRole="link"
+            accessibilityLabel="Open detailed weather forecast"
+            style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+            <Text variant="headline">{t('forecast')}</Text>
+            <Text variant="caption" tone="accent">{t('viewAll')} ›</Text>
+          </TouchableOpacity>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 12, paddingRight: 16 }}>
             {weatherForecast.map((day: any, index: number) => {
               const WeatherIcon = weatherIconMap[day.icon] || Cloud;
               return (
-                <Surface
+                <TouchableOpacity
                   key={day.day + index}
-                  rounded="xl"
-                  style={{
-                    width: 120,
-                    gap: 10,
-                    paddingVertical: 18,
-                    alignItems: 'center',
-                    backgroundColor: index === 0 ? '#1f2937' : undefined,
-                  }}>
-                  <Text variant="caption" tone={index === 0 ? 'inverse' : 'muted'}>{day.day}</Text>
-                  <WeatherIcon size={28} color={index === 0 ? '#fcd34d' : theme.colors.textSecondary} />
-                  <Text variant="headline" tone={index === 0 ? 'inverse' : 'default'}>{day.high}°</Text>
-                  <Text variant="caption" tone={index === 0 ? 'inverse' : 'muted'}>{day.low}°</Text>
-                  {(day.precipitationProbability > 0 || day.precipitation > 0) ? (
-                    <Text variant="caption" tone="accent">
-                      <Droplets size={10} color="#38bdf8" />{' '}
-                      {day.precipitationProbability > 0
-                        ? `${Math.round(day.precipitationProbability)}% rain`
-                        : `${day.precipitation}mm`}
-                    </Text>
-                  ) : null}
-                </Surface>
+                  onPress={() => router.push('/(app)/weather-detail')}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Open weather details for ${day.day}`}>
+                  <Surface
+                    rounded="xl"
+                    style={{
+                      width: 120,
+                      gap: 10,
+                      paddingVertical: 18,
+                      alignItems: 'center',
+                      backgroundColor: index === 0 ? '#1f2937' : undefined,
+                    }}>
+                    <Text variant="caption" tone={index === 0 ? 'inverse' : 'muted'}>{day.day}</Text>
+                    <WeatherIcon size={28} color={index === 0 ? '#fcd34d' : theme.colors.textSecondary} />
+                    <Text variant="headline" tone={index === 0 ? 'inverse' : 'default'}>{day.high}°</Text>
+                    <Text variant="caption" tone={index === 0 ? 'inverse' : 'muted'}>{day.low}°</Text>
+                    {(day.precipitationProbability > 0 || day.precipitation > 0) ? (
+                      <Text variant="caption" tone="accent">
+                        <Droplets size={10} color="#38bdf8" />{' '}
+                        {day.precipitationProbability > 0
+                          ? `${Math.round(day.precipitationProbability)}% rain`
+                          : `${day.precipitation}mm`}
+                      </Text>
+                    ) : null}
+                  </Surface>
+                </TouchableOpacity>
               );
             })}
           </ScrollView>

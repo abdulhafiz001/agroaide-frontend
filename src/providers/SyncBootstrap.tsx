@@ -1,20 +1,22 @@
 import NetInfo from '@react-native-community/netinfo';
-import React, { useEffect, useRef } from 'react';
+import { useEffect, useRef } from 'react';
+import { AppState, type AppStateStatus } from 'react-native';
 
-import { countPendingSyncActions, drainSyncQueue, syncApi } from '@/services/syncEngine';
+import { runAppSync } from '@/services/appSync';
+import { countPendingSyncActions } from '@/services/syncEngine';
+import { isSyncStale } from '@/services/syncFreshness';
 import { useAppStore } from '@/store/useAppStore';
 
 /** Watches connectivity and drains the offline action queue on reconnect. */
 export function SyncBootstrap() {
   const token = useAppStore((s) => s.accessToken);
-  const setLastSync = useAppStore((s) => s.setLastSync);
-  const lastSyncISO = useAppStore((s) => s.lastSyncISO);
   const wasOffline = useRef(false);
 
   useEffect(() => {
     if (!token) return;
 
-    const unsubscribe = NetInfo.addEventListener(async (state) => {
+    const syncIfNeeded = async (reason: 'connectivity' | 'foreground') => {
+      const state = await NetInfo.fetch();
       const online = Boolean(state.isConnected && state.isInternetReachable !== false);
       if (!online) {
         wasOffline.current = true;
@@ -22,20 +24,38 @@ export function SyncBootstrap() {
       }
 
       const pending = await countPendingSyncActions();
-      if (pending === 0 && !wasOffline.current) return;
+      const lastSync = useAppStore.getState().lastSyncISO;
+      if (pending === 0 && !wasOffline.current && !isSyncStale(lastSync)) return;
 
       try {
-        await drainSyncQueue(token);
-        await syncApi.pull(token, lastSyncISO);
-        setLastSync(new Date().toISOString());
+        await runAppSync(token);
         wasOffline.current = false;
-      } catch {
-        // Keep queue; next reconnect retries
+      } catch (error) {
+        console.info('[sync] automatic attempt deferred', {
+          reason,
+          message: error instanceof Error ? error.message : 'unknown error',
+        });
       }
+    };
+
+    void syncIfNeeded('foreground');
+    const unsubscribe = NetInfo.addEventListener((state) => {
+      const online = Boolean(state.isConnected && state.isInternetReachable !== false);
+      if (!online) {
+        wasOffline.current = true;
+        return;
+      }
+      void syncIfNeeded('connectivity');
+    });
+    const appStateSubscription = AppState.addEventListener('change', (state: AppStateStatus) => {
+      if (state === 'active') void syncIfNeeded('foreground');
     });
 
-    return () => unsubscribe();
-  }, [token, lastSyncISO, setLastSync]);
+    return () => {
+      unsubscribe();
+      appStateSubscription.remove();
+    };
+  }, [token]);
 
   return null;
 }

@@ -215,6 +215,26 @@ type TranslationKeys = {
   settings: string;
   language: string;
   selectLanguage: string;
+  offlineSync: string;
+  offlineSyncHint: string;
+  pendingActions: string;
+  syncNow: string;
+  notifications: string;
+  aiAdvisorTuning: string;
+  detailLevel: string;
+  advisoryTone: string;
+  voiceFriendlyTips: string;
+  voiceFriendlyTipsHint: string;
+  legalAndYourData: string;
+  privacyNotice: string;
+  termsOfUse: string;
+  exportMyData: string;
+  clearAdvisorScanHistories: string;
+  criticalWeatherAlerts: string;
+  aiAgronomyTips: string;
+  plantingWindowAlerts: string;
+  fieldBoundaryReminders: string;
+  diseaseOutbreakAlerts: string;
 
   // General
   back: string;
@@ -410,6 +430,26 @@ const translations: Record<SupportedLanguage, TranslationKeys> = {
     settings: 'Settings',
     language: 'Language',
     selectLanguage: 'Select language',
+    offlineSync: 'Offline sync',
+    offlineSyncHint: 'Save changes offline and sync them when you reconnect.',
+    pendingActions: 'Pending actions',
+    syncNow: 'Sync now',
+    notifications: 'Notifications',
+    aiAdvisorTuning: 'AI advisor tuning',
+    detailLevel: 'Detail level',
+    advisoryTone: 'Advisory tone',
+    voiceFriendlyTips: 'Voice-friendly tips',
+    voiceFriendlyTipsHint: 'Use shorter guidance that is easier to hear.',
+    legalAndYourData: 'Legal and your data',
+    privacyNotice: 'Privacy notice',
+    termsOfUse: 'Terms of use',
+    exportMyData: 'Export my data',
+    clearAdvisorScanHistories: 'Clear advisor and scan histories',
+    criticalWeatherAlerts: 'Critical weather alerts',
+    aiAgronomyTips: 'AI agronomy tips',
+    plantingWindowAlerts: 'Planting window alerts',
+    fieldBoundaryReminders: 'Field boundary reminders',
+    diseaseOutbreakAlerts: 'Disease outbreak alerts',
     back: 'Back',
     cancel: 'Cancel',
     save: 'Save',
@@ -602,6 +642,26 @@ const translations: Record<SupportedLanguage, TranslationKeys> = {
     settings: 'Saituna',
     language: 'Harshe',
     selectLanguage: 'Zaɓi harshe',
+    offlineSync: 'Daidaitawa ba tare da intanet ba',
+    offlineSyncHint: 'Ajiye canje-canje, sannan a daidaita idan intanet ya dawo.',
+    pendingActions: 'Ayyukan da ke jira',
+    syncNow: 'Daidaita yanzu',
+    notifications: 'Sanarwa',
+    aiAdvisorTuning: 'Saitin mai ba da shawarar AI',
+    detailLevel: 'Yawan bayani',
+    advisoryTone: 'Salon shawara',
+    voiceFriendlyTips: 'Shawara mai sauƙin sauraro',
+    voiceFriendlyTipsHint: 'Yi amfani da gajeriyar shawara mai sauƙin ji.',
+    legalAndYourData: 'Doka da bayananka',
+    privacyNotice: 'Bayanin sirri',
+    termsOfUse: 'Sharuɗɗan amfani',
+    exportMyData: 'Fitar da bayanana',
+    clearAdvisorScanHistories: 'Goge tarihin shawara da bincike',
+    criticalWeatherAlerts: 'Muhimman faɗakarwar yanayi',
+    aiAgronomyTips: 'Shawarwarin noma na AI',
+    plantingWindowAlerts: 'Faɗakarwar lokacin shuka',
+    fieldBoundaryReminders: 'Tunatarwar iyakar fili',
+    diseaseOutbreakAlerts: 'Faɗakarwar barkewar cuta',
     back: 'Koma',
     cancel: 'Soke',
     save: 'Ajiye',
@@ -794,6 +854,26 @@ const translations: Record<SupportedLanguage, TranslationKeys> = {
     settings: 'Ètò',
     language: 'Èdè',
     selectLanguage: 'Yan èdè',
+    offlineSync: 'Amuṣiṣẹpọ laisi intanẹẹti',
+    offlineSyncHint: 'Fi ayipada pamọ, ki o mu wọn ṣiṣẹ pọ nigbati intanẹẹti ba pada.',
+    pendingActions: 'Awọn iṣẹ ti n duro',
+    syncNow: 'Mu ṣiṣẹ pọ bayii',
+    notifications: 'Awọn iwifunni',
+    aiAdvisorTuning: 'Ètò oludamọran AI',
+    detailLevel: 'Ipele alaye',
+    advisoryTone: 'Ohun imọran',
+    voiceFriendlyTips: 'Imọran ti o rọrun lati gbọ',
+    voiceFriendlyTipsHint: 'Lo imọran kukuru ti o rọrun lati gbọ.',
+    legalAndYourData: 'Ofin ati data rẹ',
+    privacyNotice: 'Akiyesi aṣiri',
+    termsOfUse: 'Awọn ofin lilo',
+    exportMyData: 'Gba data mi jade',
+    clearAdvisorScanHistories: 'Pa itan imọran ati ayẹwo rẹ',
+    criticalWeatherAlerts: 'Ikilọ oju-ọjọ pataki',
+    aiAgronomyTips: 'Imọran ogbin AI',
+    plantingWindowAlerts: 'Ikilọ akoko gbingbin',
+    fieldBoundaryReminders: 'Iranti aala oko',
+    diseaseOutbreakAlerts: 'Ikilọ itankale arun',
     back: 'Pada',
     cancel: 'Fagilee',
     save: 'Fi pamọ',
@@ -986,6 +1066,26 @@ const translations: Record<SupportedLanguage, TranslationKeys> = {
     settings: 'Settings',
     language: 'Language',
     selectLanguage: 'Pick language',
+    offlineSync: 'Offline sync',
+    offlineSyncHint: 'Save changes offline and sync dem when network come back.',
+    pendingActions: 'Actions wey dey wait',
+    syncNow: 'Sync now',
+    notifications: 'Notifications',
+    aiAdvisorTuning: 'AI adviser settings',
+    detailLevel: 'How much detail',
+    advisoryTone: 'Advice style',
+    voiceFriendlyTips: 'Tips wey easy to hear',
+    voiceFriendlyTipsHint: 'Use shorter advice wey easy to listen to.',
+    legalAndYourData: 'Legal matter and your data',
+    privacyNotice: 'Privacy notice',
+    termsOfUse: 'Terms of use',
+    exportMyData: 'Export my data',
+    clearAdvisorScanHistories: 'Clear adviser and scan history',
+    criticalWeatherAlerts: 'Serious weather alerts',
+    aiAgronomyTips: 'AI farming tips',
+    plantingWindowAlerts: 'Planting time alerts',
+    fieldBoundaryReminders: 'Field boundary reminders',
+    diseaseOutbreakAlerts: 'Disease outbreak alerts',
     back: 'Go back',
     cancel: 'Cancel',
     save: 'Save',

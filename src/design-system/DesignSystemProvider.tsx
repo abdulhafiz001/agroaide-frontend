@@ -24,7 +24,7 @@ export const DesignSystemProvider: React.FC<DesignSystemProviderProps> = ({ chil
   const setPreference = useAppStore((state) => state.setThemePreference);
   const systemScheme = useColorScheme();
 
-  const theme = useMemo(() => getThemeByPreference(preference, systemScheme), [preference, systemScheme]);
+  const theme = useMemo(() => getThemeByPreference(preference, systemScheme ?? null), [preference, systemScheme]);
 
   const navigationTheme = useMemo<Theme>(() => {
     const baseTheme = theme.mode === 'light' ? DefaultTheme : DarkTheme;

@@ -17,6 +17,7 @@ const Wrapper = styled.View`
 `;
 
 const InputRow = styled.View<{ hasError?: boolean }>`
+  min-height: 48px;
   width: 100%;
   flex-direction: row;
   align-items: center;
@@ -27,7 +28,7 @@ const InputRow = styled.View<{ hasError?: boolean }>`
   padding-right: ${({ theme }) => theme.spacing.sm}px;
 `;
 
-const StyledInput = styled.TextInput`
+const StyledInput = styled(TextInput)`
   flex: 1;
   padding: ${({ theme }) => `${theme.spacing.sm}px ${theme.spacing.md}px`};
   color: ${({ theme }) => theme.colors.textPrimary};
@@ -43,7 +44,14 @@ export const InputField = forwardRef<TextInput, InputProps>(({ label, error, rig
         </Text>
       ) : null}
       <InputRow hasError={Boolean(error)}>
-        <StyledInput ref={ref} placeholderTextColor="#9ba3ab" style={style} {...rest} />
+        <StyledInput
+          ref={ref}
+          placeholderTextColor="#9ba3ab"
+          style={style}
+          accessibilityLabel={rest.accessibilityLabel ?? label}
+          accessibilityHint={rest.accessibilityHint ?? error}
+          {...rest}
+        />
         {rightElement ? <View>{rightElement}</View> : null}
       </InputRow>
       {error ? (

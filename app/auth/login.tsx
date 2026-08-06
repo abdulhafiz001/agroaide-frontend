@@ -1,22 +1,19 @@
 import { useMutation } from '@tanstack/react-query';
 import { Link, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
 import { KeyboardAvoidingView, Platform, Pressable, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import styled from '@/design-system/styled';
-import { useTheme } from 'styled-components/native';
+import styled, { useTheme } from '@/design-system/styled';
+
 
 import { useToast } from '@/components/Toast';
 import { Button, InputField, Surface, Text } from '@/design-system/components';
 import { ApiError } from '@/services/apiClient';
 import { authApi } from '@/services/authApi';
+import { clearAllSyncActions } from '@/services/syncQueue';
 import { useAppStore } from '@/store/useAppStore';
-import {
-  clearRememberedCredentials,
-  loadRememberedCredentials,
-  saveRememberedCredentials,
-} from '@/utils/rememberedCredentials';
+import { authStorage } from '@/utils/authStorage';
 import { clearAuthQueryCache } from '@/utils/queryClient';
 import { isFarmProfileComplete } from '@/utils/farmProfile';
 
@@ -39,23 +36,6 @@ const Card = styled(Surface)`
   gap: ${({ theme }) => theme.spacing.md}px;
 `;
 
-const RememberRow = styled.Pressable`
-  flex-direction: row;
-  align-items: center;
-  gap: 10px;
-`;
-
-const Checkbox = styled.View<{ checked: boolean }>`
-  width: 22px;
-  height: 22px;
-  border-radius: 6px;
-  border-width: 1.5px;
-  align-items: center;
-  justify-content: center;
-  border-color: ${({ theme, checked }) => (checked ? theme.colors.primary : theme.colors.border)};
-  background-color: ${({ theme, checked }) => (checked ? theme.colors.primary : 'transparent')};
-`;
-
 export default function LoginScreen() {
   const router = useRouter();
   const theme = useTheme();
@@ -63,36 +43,19 @@ export default function LoginScreen() {
   const [identifier, setIdentifier] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
-  const [rememberMe, setRememberMe] = useState(false);
   const setAuthState = useAppStore((state) => state.setAuthState);
   const setProfile = useAppStore((state) => state.setFarmerProfile);
-
-  useEffect(() => {
-    let mounted = true;
-    (async () => {
-      const saved = await loadRememberedCredentials();
-      if (!mounted || !saved) return;
-      setIdentifier(saved.identifier);
-      setPassword(saved.password);
-      setRememberMe(true);
-    })();
-    return () => {
-      mounted = false;
-    };
-  }, []);
 
   const loginMutation = useMutation({
     mutationFn: () => authApi.login(identifier.trim(), password),
     onMutate: () => setAuthState({ status: 'authenticating' }),
     onSuccess: async (response) => {
       clearAuthQueryCache();
+      await clearAllSyncActions();
+      await authStorage.saveToken(response.token);
       setAuthState({ status: 'authenticated', token: response.token });
       setProfile(response.profile);
-      if (rememberMe) {
-        await saveRememberedCredentials({ identifier: identifier.trim(), password });
-      } else {
-        await clearRememberedCredentials();
-      }
+      console.info('[auth] sign-in completed');
       toast.success('Welcome back', 'Signed in successfully.');
       if (!isFarmProfileComplete(response.profile)) {
         router.replace('/auth/complete-farm');
@@ -136,7 +99,11 @@ export default function LoginScreen() {
               value={password}
               onChangeText={setPassword}
               rightElement={
-                <Pressable onPress={() => setShowPassword((v) => !v)} hitSlop={8}>
+                <Pressable
+                  onPress={() => setShowPassword((v) => !v)}
+                  hitSlop={8}
+                  accessibilityRole="button"
+                  accessibilityLabel={showPassword ? 'Hide password' : 'Show password'}>
                   <Ionicons
                     name={showPassword ? 'eye-off-outline' : 'eye-outline'}
                     size={20}
@@ -145,15 +112,7 @@ export default function LoginScreen() {
                 </Pressable>
               }
             />
-            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-              <RememberRow onPress={() => setRememberMe((v) => !v)}>
-                <Checkbox checked={rememberMe}>
-                  {rememberMe ? <Ionicons name="checkmark" size={14} color="#ffffff" /> : null}
-                </Checkbox>
-                <Text variant="caption" tone="muted">
-                  Remember my details
-                </Text>
-              </RememberRow>
+            <View style={{ alignItems: 'flex-end' }}>
               <Link href="/auth/recovery" asChild>
                 <Text variant="caption" tone="accent" align="right">
                   Forgot password?

@@ -1,7 +1,8 @@
 import { Tabs } from 'expo-router';
 import React from 'react';
-import { Platform } from 'react-native';
+import { Platform, Pressable } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { DrawerActions } from '@react-navigation/native';
 
 import { useThemeController } from '@/design-system/DesignSystemProvider';
 import { useTranslation } from '@/i18n/useTranslation';
@@ -20,8 +21,21 @@ export default function TabsLayout() {
 
   return (
     <Tabs
-      screenOptions={({ route }) => ({
-        headerShown: false,
+      screenOptions={({ route, navigation }) => ({
+        headerShown: true,
+        headerStyle: { backgroundColor: theme.colors.surface },
+        headerTintColor: theme.colors.textPrimary,
+        headerTitle: 'AgroAide',
+        headerLeft: () => (
+          <Pressable
+            onPress={() => navigation.getParent()?.dispatch(DrawerActions.openDrawer())}
+            hitSlop={12}
+            accessibilityRole="button"
+            accessibilityLabel="Open main menu"
+            style={{ marginLeft: 16, padding: 6 }}>
+            <Ionicons name="menu" size={26} color={theme.colors.textPrimary} />
+          </Pressable>
+        ),
         tabBarActiveTintColor: theme.colors.primary,
         tabBarInactiveTintColor: theme.colors.textSecondary,
         tabBarLabelStyle: { fontFamily: 'Inter_500Medium', fontSize: 10},

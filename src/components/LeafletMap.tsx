@@ -1,6 +1,7 @@
 import React, { forwardRef, useImperativeHandle, useMemo, useRef } from 'react';
 import { StyleProp, ViewStyle } from 'react-native';
 import { WebView } from 'react-native-webview';
+import { sanitizeMapColor, sanitizeMapText, serializeForInlineScript } from '@/utils/mapSecurity';
 
 export type LeafletMarker = {
   id?: string;
@@ -55,30 +56,30 @@ function buildHtml({
 }: Required<
   Pick<LeafletMapProps, 'center' | 'zoom' | 'markers' | 'circles' | 'polygons' | 'scrollEnabled'>
 >): string {
-  const markersJson = JSON.stringify(
+  const markersJson = serializeForInlineScript(
     markers.map((m) => ({
       lat: m.latitude,
       lng: m.longitude,
-      title: m.title ?? '',
-      description: m.description ?? '',
-      color: m.color ?? '#57b346',
+      title: sanitizeMapText(m.title),
+      description: sanitizeMapText(m.description),
+      color: sanitizeMapColor(m.color, '#57b346'),
     })),
   );
-  const circlesJson = JSON.stringify(
+  const circlesJson = serializeForInlineScript(
     circles.map((c) => ({
       lat: c.latitude,
       lng: c.longitude,
       radius: c.radiusMeters,
-      color: c.color ?? '#e63946',
+      color: sanitizeMapColor(c.color, '#e63946'),
       fillOpacity: c.fillOpacity ?? 0.2,
     })),
   );
-  const polygonsJson = JSON.stringify(
+  const polygonsJson = serializeForInlineScript(
     polygons.map((p) => ({
       coords: p.coordinates.map((c) => [c.latitude, c.longitude]),
-      color: p.color ?? '#57b346',
+      color: sanitizeMapColor(p.color, '#57b346'),
       fillOpacity: p.fillOpacity ?? 0.2,
-      label: p.label ?? '',
+      label: sanitizeMapText(p.label),
     })),
   );
 
@@ -87,6 +88,7 @@ function buildHtml({
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src https://unpkg.com 'unsafe-inline'; style-src https://unpkg.com 'unsafe-inline'; img-src https://*.tile.openstreetmap.org data:; connect-src 'none'; font-src 'none'; frame-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'" />
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <style>
@@ -243,8 +245,7 @@ export const LeafletMap = forwardRef<LeafletMapHandle, LeafletMapProps>(function
         polygons,
         scrollEnabled,
       }),
-    // Intentionally rebuild when geometry changes
-    [center.latitude, center.longitude, zoom, JSON.stringify(markers), JSON.stringify(circles), JSON.stringify(polygons), scrollEnabled],
+    [center, zoom, markers, circles, polygons, scrollEnabled],
   );
 
   useImperativeHandle(ref, () => ({
@@ -265,13 +266,16 @@ export const LeafletMap = forwardRef<LeafletMapHandle, LeafletMapProps>(function
   return (
     <WebView
       ref={webRef}
-      originWhitelist={['*']}
+      originWhitelist={['about:blank', 'https://*']}
       source={{ html }}
       style={[{ flex: 1, backgroundColor: '#e8f5e9' }, style]}
       scrollEnabled={false}
       javaScriptEnabled
-      domStorageEnabled
-      mixedContentMode="always"
+      domStorageEnabled={false}
+      mixedContentMode="never"
+      allowFileAccess={false}
+      allowUniversalAccessFromFileURLs={false}
+      onShouldStartLoadWithRequest={(request) => request.url === 'about:blank'}
       setSupportMultipleWindows={false}
       androidLayerType="hardware"
     />

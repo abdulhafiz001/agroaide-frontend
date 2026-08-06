@@ -4,7 +4,7 @@ import styled from '@/design-system/styled';
 import { typography } from '../design-tokens';
 
 type TextVariant = 'display' | 'title' | 'headline' | 'body' | 'caption' | 'eyebrow';
-type TextTone = 'default' | 'muted' | 'inverse' | 'accent' | 'success' | 'warning' | 'danger';
+type TextTone = 'default' | 'muted' | 'inverse' | 'accent' | 'success' | 'warning' | 'danger' | 'info';
 
 type SizeKey = keyof typeof typography.sizes;
 type WeightKey = keyof typeof typography.weights;
@@ -42,6 +42,8 @@ const toneColor = (tone: TextTone, theme: any) => {
       return theme.colors.warning;
     case 'danger':
       return theme.colors.danger;
+    case 'info':
+      return theme.colors.info;
     default:
       return theme.colors.textPrimary;
   }

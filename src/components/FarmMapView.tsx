@@ -33,12 +33,12 @@ export const FarmMapView = forwardRef<FarmMapViewHandle, FarmMapViewProps>(funct
   const mapRef = useRef<LeafletMapHandle>(null);
 
   const polygons = useMemo(() => {
-    const layers: Array<{
+    const layers: {
       coordinates: MapCoordinate[];
       color: string;
       fillOpacity: number;
       label?: string;
-    }> = [];
+    }[] = [];
 
     if (polygon.length >= 3) {
       layers.push({

@@ -28,3 +28,5 @@ export const LocationMapPreview = forwardRef<LeafletMapHandle, LocationMapPrevie
     />
   ),
 );
+
+LocationMapPreview.displayName = 'LocationMapPreview';

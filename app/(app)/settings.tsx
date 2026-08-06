@@ -1,13 +1,14 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { KeyboardAvoidingView, Platform, Switch, TouchableOpacity, View } from 'react-native';
+import { Alert, KeyboardAvoidingView, Platform, Switch, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useTheme } from 'styled-components/native';
+import styled, { useTheme } from '@/design-system/styled';
 
 import * as Location from 'expo-location';
+import * as FileSystem from 'expo-file-system/legacy';
+import * as Sharing from 'expo-sharing';
 import { useToast } from '@/components/Toast';
 import { Button, Chip, InputField, Surface, Text } from '@/design-system/components';
 import { authApi } from '@/services/authApi';
@@ -18,9 +19,12 @@ import { LANGUAGE_OPTIONS, type SupportedLanguage } from '@/i18n/translations';
 import { useTranslation } from '@/i18n/useTranslation';
 import { clearAuthQueryCache } from '@/utils/queryClient';
 import { formatAreaWithFt, formatSquareSidesFt } from '@/utils/formatters';
-import { countPendingSyncActions, drainSyncQueue } from '@/services/syncEngine';
+import { countPendingSyncActions } from '@/services/syncEngine';
+import { runAppSync } from '@/services/appSync';
+import { clearAllSyncActions } from '@/services/syncQueue';
+import { authStorage } from '@/utils/authStorage';
 
-import styled from '@/design-system/styled';
+
 
 const Screen = styled(SafeAreaView)`
   flex: 1;
@@ -67,25 +71,30 @@ const SegmentButton = styled.TouchableOpacity<{ active: boolean }>`
 
 const notificationSettings: {
   key: keyof NotificationPreferences;
-  label: string;
+  labelKey:
+    | 'criticalWeatherAlerts'
+    | 'aiAgronomyTips'
+    | 'plantingWindowAlerts'
+    | 'fieldBoundaryReminders'
+    | 'diseaseOutbreakAlerts';
   description: string;
   locked?: boolean;
 }[] = [
-  { key: 'severeWeather', label: 'Critical weather alerts', description: 'Storms, heat waves & frost advisories.' },
-  { key: 'aiInsights', label: 'AI agronomy tips', description: 'Timely crop health nudges.' },
+  { key: 'severeWeather', labelKey: 'criticalWeatherAlerts', description: 'Storms, heat waves & frost advisories.' },
+  { key: 'aiInsights', labelKey: 'aiAgronomyTips', description: 'Timely crop health nudges.' },
   {
     key: 'plantingWindowAlerts',
-    label: 'Planting window alerts',
+    labelKey: 'plantingWindowAlerts',
     description: 'Notify when it is time to plant watched crops in your zone.',
   },
   {
     key: 'fieldBoundaryReminders',
-    label: 'Field boundary reminders',
+    labelKey: 'fieldBoundaryReminders',
     description: 'Remind you to walk field boundaries within 24 hours of adding a field.',
   },
   {
     key: 'diseaseOutbreak',
-    label: 'Disease outbreak alerts',
+    labelKey: 'diseaseOutbreakAlerts',
     description: 'Community disease warnings near your farm. Always on for safety.',
     locked: true,
   },
@@ -119,9 +128,9 @@ export default function ProfileScreen() {
   const updateAiAdvisorPreference = useAppStore((s) => s.updateAiAdvisorPreference);
   const setProfile = useAppStore((s) => s.setFarmerProfile);
   const lastSyncISO = useAppStore((s) => s.lastSyncISO);
-  const setLastSync = useAppStore((s) => s.setLastSync);
   const offlineModeEnabled = useAppStore((s) => s.offlineModeEnabled);
   const setOfflineMode = useAppStore((s) => s.setOfflineMode);
+  const clearPersonalDataViews = useAppStore((s) => s.clearPersonalDataViews);
   const [pendingSyncCount, setPendingSyncCount] = useState(0);
   const [syncingNow, setSyncingNow] = useState(false);
 
@@ -139,6 +148,7 @@ export default function ProfileScreen() {
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmNewPassword, setConfirmNewPassword] = useState('');
+  const [deletePassword, setDeletePassword] = useState('');
 
   const [editFarmLatitude, setEditFarmLatitude] = useState<number | null>(null);
   const [editFarmLongitude, setEditFarmLongitude] = useState<number | null>(null);
@@ -238,11 +248,111 @@ export default function ProfileScreen() {
 
   const logoutMutation = useMutation({
     mutationFn: async () => { if (accessToken) await authApi.logout(accessToken); },
-    onSettled: () => {
+    onSettled: async () => {
+      await Promise.all([
+        authStorage.clearToken().catch(() => {}),
+        clearAllSyncActions().catch(() => {}),
+      ]);
       clearAuthQueryCache();
       signOut();
+      console.info('[auth] signed out');
       router.replace('/auth/login');
     },
+  });
+
+  const exportAccountMutation = useMutation({
+    mutationFn: async () => {
+      console.info('[export] requesting account data');
+      const result = await authApi.exportAccountData(accessToken ?? '');
+      console.info('[export] response received', {
+        hasContent: Boolean(result.content),
+      });
+
+      if (!result.content) {
+        throw new Error('No export content was returned.');
+      }
+
+      const safeFilename = (result.filename || `agroaide-export-${Date.now()}.json`).replace(/[^a-z0-9._-]/gi, '-');
+
+      if (Platform.OS === 'web' && typeof document !== 'undefined') {
+        const objectUrl = URL.createObjectURL(new Blob([result.content], { type: 'application/json' }));
+        try {
+          const link = document.createElement('a');
+          link.href = objectUrl;
+          link.download = safeFilename;
+          link.click();
+          console.info('[export] browser download started', { filename: safeFilename });
+          return safeFilename;
+        } finally {
+          URL.revokeObjectURL(objectUrl);
+        }
+      }
+
+      const baseDirectory = FileSystem.cacheDirectory ?? FileSystem.documentDirectory;
+      if (baseDirectory) {
+        try {
+          const fileUri = `${baseDirectory}${safeFilename}`;
+          console.info('[export] writing export to cache', { filename: safeFilename });
+          await FileSystem.writeAsStringAsync(fileUri, result.content, {
+            encoding: FileSystem.EncodingType.UTF8,
+          });
+          console.info('[export] export cached');
+          if (await Sharing.isAvailableAsync()) {
+            console.info('[export] opening share sheet');
+            await Sharing.shareAsync(fileUri, {
+              mimeType: 'application/json',
+              dialogTitle: 'Share your AgroAide data',
+            });
+            console.info('[export] share sheet completed');
+            return safeFilename;
+          }
+          console.info('[export] sharing unavailable; export kept on device', { filename: safeFilename });
+          return safeFilename;
+        } catch (error) {
+          console.info('[export] inline export could not be shared', {
+            message: error instanceof Error ? error.message : 'unknown error',
+          });
+        }
+      }
+
+      throw new Error('No writable export location is available.');
+    },
+    onSuccess: (filename) => toast.success('Export ready', `${filename} is ready to save or share.`),
+    onError: () => toast.error('Export failed', 'We could not prepare your data. Please try again.'),
+  });
+
+  const clearHistoriesMutation = useMutation({
+    mutationFn: () => authApi.clearHistories(accessToken ?? ''),
+    onSuccess: async () => {
+      const personalPrefixes = new Set([
+        'advisorHistory',
+        'advisorScanContext',
+        'scanHistory',
+        'farmScan',
+        'dashboardAiInsights',
+      ]);
+      queryClient.removeQueries({
+        predicate: (query) => personalPrefixes.has(String(query.queryKey[0] ?? '')),
+      });
+      clearPersonalDataViews();
+      toast.success('Histories cleared', 'Advisor and scan histories were removed.');
+    },
+    onError: () => toast.error('Could not clear histories', 'Please try again.'),
+  });
+
+  const deleteAccountMutation = useMutation({
+    mutationFn: () => authApi.deleteAccount(accessToken ?? '', deletePassword),
+    onSuccess: async () => {
+      await Promise.all([
+        authStorage.clearToken(),
+        clearAllSyncActions(),
+      ]);
+      clearAuthQueryCache();
+      signOut();
+      console.info('[auth] account deleted; local session cleared');
+      router.replace('/auth/login');
+    },
+    onError: () => toast.error('Could not delete account', 'Check your password and try again.'),
   });
 
   const { t } = useTranslation();
@@ -256,7 +366,7 @@ export default function ProfileScreen() {
     } catch {
       toast.error('Error', 'Could not update language preference.');
     }
-  }, [accessToken, setProfile]);
+  }, [accessToken, setProfile, toast]);
 
   const handleGPSLocation = useCallback(async () => {
     try {
@@ -293,9 +403,8 @@ export default function ProfileScreen() {
         keyboardVerticalOffset={Platform.OS === 'ios' ? 8 : 0}
       >
       <Content>
-        <LinearGradient
-          colors={['#57b346', '#2c5c2a']}
-          style={{ borderRadius: 32, padding: 24, flexDirection: 'row', alignItems: 'center', gap: 16 }}>
+        <View
+          style={{ borderRadius: 32, padding: 24, flexDirection: 'row', alignItems: 'center', gap: 16, backgroundColor: theme.colors.primary }}>
           <Surface
             variant="transparent"
             style={{
@@ -309,7 +418,7 @@ export default function ProfileScreen() {
             <Text variant="title" tone="inverse">{profile?.fullName ?? 'Farmer'}</Text>
             <Text variant="body" tone="inverse">{profile?.farmName ?? 'Your farm'}, {profile?.farmLocation ?? 'Nigeria'}</Text>
           </View>
-        </LinearGradient>
+        </View>
 
         {/* Personal Details - Edit Section */}
         <Section rounded="xl">
@@ -463,7 +572,13 @@ export default function ProfileScreen() {
           <Text variant="headline">Display & modes</Text>
           <SegmentedControl>
             {(['system', 'light', 'dark', 'field'] as ThemePreference[]).map((mode) => (
-              <SegmentButton key={mode} active={themePreference === mode} onPress={() => setThemePreference(mode)}>
+              <SegmentButton
+                key={mode}
+                active={themePreference === mode}
+                onPress={() => setThemePreference(mode)}
+                accessibilityRole="radio"
+                accessibilityLabel={`${mode} display mode`}
+                accessibilityState={{ selected: themePreference === mode }}>
                 <Text variant="caption" tone={themePreference === mode ? 'default' : 'muted'}>
                   {mode === 'field' ? 'Field' : mode.charAt(0).toUpperCase() + mode.slice(1)}
                 </Text>
@@ -475,19 +590,25 @@ export default function ProfileScreen() {
         <Section rounded="xl">
           <Row>
             <View style={{ flex: 1, paddingRight: 12 }}>
-              <Text variant="headline">Offline sync</Text>
+              <Text variant="headline">{t('offlineSync')}</Text>
               <Text variant="caption" tone="muted">
-                Fields, tasks, journal notes, transactions, and boundaries queue offline and sync when you reconnect.
+                {t('offlineSyncHint')}
               </Text>
             </View>
-            <Switch value={offlineModeEnabled} onValueChange={setOfflineMode} />
+            <Switch
+              value={offlineModeEnabled}
+              onValueChange={setOfflineMode}
+              accessibilityRole="switch"
+              accessibilityLabel={t('offlineSync')}
+              accessibilityState={{ checked: offlineModeEnabled }}
+            />
           </Row>
-          <Text variant="body">Pending actions: {pendingSyncCount}</Text>
+          <Text variant="body">{t('pendingActions')}: {pendingSyncCount}</Text>
           <Text variant="caption" tone="muted">
             {lastSyncISO ? `Last synced ${new Date(lastSyncISO).toLocaleString()}` : 'Not synced yet'}
           </Text>
           <Button
-            label="Sync now"
+            label={t('syncNow')}
             variant="secondary"
             loading={syncingNow}
             fullWidth
@@ -495,8 +616,7 @@ export default function ProfileScreen() {
               if (!accessToken) return;
               setSyncingNow(true);
               try {
-                await drainSyncQueue(accessToken);
-                setLastSync(new Date().toISOString());
+                await runAppSync(accessToken);
                 setPendingSyncCount(await countPendingSyncActions());
                 toast.success('Synced', 'Offline queue drained.');
               } catch {
@@ -510,17 +630,23 @@ export default function ProfileScreen() {
 
         {/* Notifications */}
         <Section rounded="xl">
-          <Text variant="headline">Notifications</Text>
+          <Text variant="headline">{t('notifications')}</Text>
           {notificationSettings.map((setting) => (
             <View key={setting.key} style={{ paddingVertical: 6 }}>
               <Row>
                 <View style={{ flex: 1, paddingRight: 12 }}>
-                  <Text variant="body">{setting.label}</Text>
+                  <Text variant="body">{t(setting.labelKey)}</Text>
                   <Text variant="caption" tone="muted">{setting.description}</Text>
                 </View>
                 <Switch
                   value={setting.locked ? true : Boolean(notificationPreferences[setting.key])}
                   disabled={setting.locked}
+                  accessibilityRole="switch"
+                  accessibilityLabel={t(setting.labelKey)}
+                  accessibilityState={{
+                    checked: setting.locked ? true : Boolean(notificationPreferences[setting.key]),
+                    disabled: Boolean(setting.locked),
+                  }}
                   onValueChange={(v) => {
                     if (setting.locked) return;
                     updateNotificationPreferences({ [setting.key]: v });
@@ -540,27 +666,109 @@ export default function ProfileScreen() {
 
         {/* AI Advisor Tuning */}
         <Section rounded="xl">
-          <Text variant="headline">AI advisor tuning</Text>
+          <Text variant="headline">{t('aiAdvisorTuning')}</Text>
           <View>
-            <Text variant="caption" tone="muted">Detail level</Text>
+            <Text variant="caption" tone="muted">{t('detailLevel')}</Text>
             <SegmentedControl>
               {detailSegments.map((s) => (
-                <SegmentButton key={s.value} active={aiAdvisorPreference.detailLevel === s.value} onPress={() => updateAiAdvisorPreference({ detailLevel: s.value })}>
+                <SegmentButton
+                  key={s.value}
+                  active={aiAdvisorPreference.detailLevel === s.value}
+                  onPress={() => {
+                    updateAiAdvisorPreference({ detailLevel: s.value });
+                    authApi.updateProfile(accessToken ?? '', { aiDetailLevel: s.value }).catch(() => {});
+                  }}
+                  accessibilityRole="radio"
+                  accessibilityLabel={s.label}
+                  accessibilityState={{ selected: aiAdvisorPreference.detailLevel === s.value }}>
                   <Text variant="caption" tone={aiAdvisorPreference.detailLevel === s.value ? 'default' : 'muted'}>{s.label}</Text>
                 </SegmentButton>
               ))}
             </SegmentedControl>
           </View>
           <View>
-            <Text variant="caption" tone="muted">Advisory tone</Text>
+            <Text variant="caption" tone="muted">{t('advisoryTone')}</Text>
             <SegmentedControl>
               {toneSegments.map((s) => (
-                <SegmentButton key={s.value} active={aiAdvisorPreference.tone === s.value} onPress={() => updateAiAdvisorPreference({ tone: s.value })}>
+                <SegmentButton
+                  key={s.value}
+                  active={aiAdvisorPreference.tone === s.value}
+                  onPress={() => {
+                    updateAiAdvisorPreference({ tone: s.value });
+                    authApi.updateProfile(accessToken ?? '', { aiTone: s.value }).catch(() => {});
+                  }}
+                  accessibilityRole="radio"
+                  accessibilityLabel={s.label}
+                  accessibilityState={{ selected: aiAdvisorPreference.tone === s.value }}>
                   <Text variant="caption" tone={aiAdvisorPreference.tone === s.value ? 'default' : 'muted'}>{s.label}</Text>
                 </SegmentButton>
               ))}
             </SegmentedControl>
           </View>
+          <Row>
+            <View style={{ flex: 1, paddingRight: 12 }}>
+              <Text variant="body">{t('voiceFriendlyTips')}</Text>
+              <Text variant="caption" tone="muted">{t('voiceFriendlyTipsHint')}</Text>
+            </View>
+            <Switch
+              value={aiAdvisorPreference.voiceTips}
+              onValueChange={(value) => {
+                updateAiAdvisorPreference({ voiceTips: value });
+                authApi.updateProfile(accessToken ?? '', { aiVoiceTips: value }).catch(() => {});
+              }}
+              accessibilityRole="switch"
+              accessibilityLabel={t('voiceFriendlyTips')}
+              accessibilityState={{ checked: aiAdvisorPreference.voiceTips }}
+            />
+          </Row>
+        </Section>
+
+        <Section rounded="xl">
+          <Text variant="headline">{t('legalAndYourData')}</Text>
+          <Button label={t('privacyNotice')} variant="secondary" onPress={() => router.push('/privacy' as never)} fullWidth />
+          <Button label={t('termsOfUse')} variant="secondary" onPress={() => router.push('/terms' as never)} fullWidth />
+          <Button
+            label={t('exportMyData')}
+            variant="secondary"
+            loading={exportAccountMutation.isPending}
+            onPress={() => exportAccountMutation.mutate()}
+            fullWidth
+          />
+          <Button
+            label={t('clearAdvisorScanHistories')}
+            variant="secondary"
+            loading={clearHistoriesMutation.isPending}
+            onPress={() => Alert.alert(
+              'Clear histories?',
+              'This removes advisor and crop scan history from your account.',
+              [
+                { text: 'Cancel', style: 'cancel' },
+                { text: 'Clear', style: 'destructive', onPress: () => clearHistoriesMutation.mutate() },
+              ],
+            )}
+            fullWidth
+          />
+          <InputField
+            label="Password required to delete account"
+            value={deletePassword}
+            onChangeText={setDeletePassword}
+            secureTextEntry
+          />
+          <Button
+            label="Delete account"
+            variant="ghost"
+            disabled={!deletePassword}
+            loading={deleteAccountMutation.isPending}
+            onPress={() => Alert.alert(
+              'Delete account permanently?',
+              'Your AgroAide account and associated data will be scheduled for deletion.',
+              [
+                { text: 'Cancel', style: 'cancel' },
+                { text: 'Delete', style: 'destructive', onPress: () => deleteAccountMutation.mutate() },
+              ],
+            )}
+            fullWidth
+          />
         </Section>
 
         <Button

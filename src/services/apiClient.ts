@@ -1,9 +1,10 @@
-const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL?.trim();
+const configuredApiBaseUrl = process.env.EXPO_PUBLIC_API_URL?.trim();
 
-if (!API_BASE_URL) {
+if (!configuredApiBaseUrl) {
   // Failing early avoids silent networking bugs across platforms.
   throw new Error('Missing EXPO_PUBLIC_API_URL. Set it in AgroAide-frontend/.env');
 }
+const API_BASE_URL = configuredApiBaseUrl;
 
 export class ApiError extends Error {
   statusCode: number;
@@ -28,7 +29,7 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
   const { method = 'GET', body, token, timeoutMs } = options;
   let response: Response;
 
-  let timeoutId: ReturnType<typeof setTimeout>;
+  let timeoutId: ReturnType<typeof setTimeout> | undefined;
   try {
     const controller = new AbortController();
     timeoutId = setTimeout(() => controller.abort(), timeoutMs ?? REQUEST_TIMEOUT_MS);
@@ -70,4 +71,45 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
   }
 
   return (await response.json()) as T;
+}
+
+export async function apiTextRequest(
+  path: string,
+  options: Pick<RequestOptions, 'token' | 'timeoutMs'> = {},
+): Promise<{ content: string; filename?: string }> {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), options.timeoutMs ?? REQUEST_TIMEOUT_MS);
+
+  try {
+    const response = await fetch(`${API_BASE_URL}${path}`, {
+      method: 'GET',
+      signal: controller.signal,
+      headers: {
+        Accept: 'application/json',
+        ...(options.token ? { Authorization: `Bearer ${options.token}` } : {}),
+      },
+    });
+
+    if (!response.ok) {
+      const payload = (await response.json().catch(() => null)) as { message?: string } | null;
+      throw new ApiError(payload?.message ?? 'Request failed.', response.status);
+    }
+
+    const disposition = response.headers.get('content-disposition') ?? '';
+    const filenameMatch = disposition.match(/filename="?([^";]+)"?/i);
+
+    return {
+      content: await response.text(),
+      ...(filenameMatch?.[1] ? { filename: filenameMatch[1] } : {}),
+    };
+  } catch (error: unknown) {
+    if (error instanceof ApiError) throw error;
+    const isTimeout = error instanceof Error && error.name === 'AbortError';
+    throw new ApiError(
+      isTimeout ? 'The export took too long. Please try again.' : 'Could not download your data.',
+      0,
+    );
+  } finally {
+    clearTimeout(timeoutId);
+  }
 }

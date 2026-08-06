@@ -36,13 +36,13 @@ export type FarmOverviewResponse = {
   map: {
     center: MapCoordinate;
     polygon: MapCoordinate[];
-    fields?: Array<{
+    fields?: {
       fieldId: string;
       name: string;
       crop?: string;
       polygon: MapCoordinate[];
       geojson?: GeoJSON.Polygon;
-    }>;
+    }[];
   } | null;
   farmSummary: {
     farmName: string;
@@ -77,7 +77,7 @@ export type FieldEconomics = {
   };
   costPerM2: number | null;
   netProfitPerM2: number | null;
-  byCategory: Array<{ category: string; expense: number; income: number; net: number }>;
+  byCategory: { category: string; expense: number; income: number; net: number }[];
 };
 
 declare namespace GeoJSON {
@@ -150,7 +150,7 @@ export const farmApi = {
         seedUnit: string;
         seedKg: number | null;
         seedStands: number | null;
-        fertilizers: Array<{ name: string; kg: number; bags50kg: number; kgPerHa: number }>;
+        fertilizers: { name: string; kg: number; bags50kg: number; kgPerHa: number }[];
         disclaimer: string;
         aiSummary: string;
       };
@@ -252,14 +252,14 @@ export const farmApi = {
 
   getFarmEconomicsSummary(token: string) {
     return apiRequest<{
-      byCrop: Array<{
+      byCrop: {
         crop: string;
         expense: number;
         income: number;
         netProfit: number;
         areaM2: number;
         costPerM2: number | null;
-      }>;
+      }[];
       totals: { expense: number; income: number; netProfit: number };
     }>('/farm/economics/summary', { token });
   },

@@ -33,6 +33,7 @@ interface AppState {
   offlineModeEnabled: boolean;
   notificationPreferences: NotificationPreferences;
   aiAdvisorPreference: AiAdvisorPreference;
+  personalDataRevision: number;
   completeOnboarding: () => void;
   setThemePreference: (preference: ThemePreference) => void;
   setAuthState: (state: { status: AuthStatus; token?: string }) => void;
@@ -44,6 +45,7 @@ interface AppState {
   setLastSync: (date?: string) => void;
   updateNotificationPreferences: (prefs: Partial<NotificationPreferences>) => void;
   updateAiAdvisorPreference: (prefs: Partial<AiAdvisorPreference>) => void;
+  clearPersonalDataViews: () => void;
 }
 
 export const useAppStore = create<AppState>()(
@@ -66,6 +68,7 @@ export const useAppStore = create<AppState>()(
         tone: 'balanced',
         voiceTips: false,
       },
+      personalDataRevision: 0,
       completeOnboarding: () => set({ onboardingCompleted: true }),
       setThemePreference: (preference) => {
         const currentProfile = get().farmerProfile;
@@ -87,6 +90,20 @@ export const useAppStore = create<AppState>()(
           notificationPreferences: profile.notificationPreferences
             ? { ...state.notificationPreferences, ...profile.notificationPreferences }
             : state.notificationPreferences,
+          aiAdvisorPreference: {
+            detailLevel:
+              profile.aiDetailLevel && ['concise', 'balanced', 'deep'].includes(profile.aiDetailLevel)
+                ? profile.aiDetailLevel
+                : state.aiAdvisorPreference.detailLevel,
+            tone:
+              profile.aiTone && ['cautious', 'balanced', 'bold'].includes(profile.aiTone)
+                ? profile.aiTone
+                : state.aiAdvisorPreference.tone,
+            voiceTips:
+              typeof profile.aiVoiceTips === 'boolean'
+                ? profile.aiVoiceTips
+                : state.aiAdvisorPreference.voiceTips,
+          },
         })),
       updateFarmerProfile: (profile) =>
         set((state) => ({
@@ -102,6 +119,8 @@ export const useAppStore = create<AppState>()(
         set((state) => ({
           aiAdvisorPreference: { ...state.aiAdvisorPreference, ...prefs },
         })),
+      clearPersonalDataViews: () =>
+        set((state) => ({ personalDataRevision: state.personalDataRevision + 1 })),
       signOut: () =>
         set({
           authStatus: 'signedOut',
@@ -111,17 +130,21 @@ export const useAppStore = create<AppState>()(
       markHydrated: () => set({ hydrated: true }),
     }),
     {
-      name: 'agroaide-store',
+      name: 'agroaide-preferences-v2',
       storage: createJSONStorage(() => AsyncStorage),
+      version: 1,
+      migrate: (persistedState) => {
+        if (!persistedState || typeof persistedState !== 'object') return persistedState;
+        const preferences = { ...(persistedState as Record<string, unknown>) };
+        delete preferences.farmerProfile;
+        return preferences;
+      },
       onRehydrateStorage: () => (state) => {
         state?.markHydrated();
       },
       // Only persist user-facing state
       partialize: (state) => ({
         onboardingCompleted: state.onboardingCompleted,
-        authStatus: state.authStatus,
-        accessToken: state.accessToken,
-        farmerProfile: state.farmerProfile,
         themePreference: state.themePreference,
         lastSyncISO: state.lastSyncISO,
         offlineModeEnabled: state.offlineModeEnabled,

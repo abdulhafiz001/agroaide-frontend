@@ -1,4 +1,5 @@
 import Constants from 'expo-constants';
+import * as Notifications from 'expo-notifications';
 
 type LocalScheduleItem = {
   id: string;
@@ -12,7 +13,6 @@ export async function scheduleLocalPlantingReminders(items: LocalScheduleItem[])
   if (Constants.appOwnership === 'expo') return;
 
   try {
-    const Notifications = require('expo-notifications');
     const { status } = await Notifications.getPermissionsAsync();
     if (status !== 'granted') {
       const req = await Notifications.requestPermissionsAsync();

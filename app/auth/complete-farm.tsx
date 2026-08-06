@@ -13,13 +13,12 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { useTheme } from 'styled-components/native';
+import styled, { useTheme } from '@/design-system/styled';
 
 import { LocationMapPreview } from '@/components/LocationMapPreview';
 import type { LeafletMapHandle } from '@/components/LeafletMap';
 import { useToast } from '@/components/Toast';
 import { Button, Chip, InputField, Surface, Text } from '@/design-system/components';
-import styled from '@/design-system/styled';
 import { ApiError } from '@/services/apiClient';
 import { authApi } from '@/services/authApi';
 import { useAppStore } from '@/store/useAppStore';

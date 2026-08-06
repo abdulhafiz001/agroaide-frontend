@@ -1,4 +1,4 @@
-import { apiRequest } from '@/services/apiClient';
+import { apiRequest, apiTextRequest } from '@/services/apiClient';
 import type { FarmerProfile } from '@/types/farmer';
 
 export interface AuthResponse {
@@ -21,6 +21,11 @@ export type RegisterPayload = {
   irrigationAccess?: FarmerProfile['irrigationAccess'];
   crops?: string[];
   experienceLevel?: FarmerProfile['experienceLevel'];
+  acceptedTerms: true;
+  acceptedPrivacy: true;
+  termsVersion: string;
+  privacyVersion: string;
+  researchConsent?: boolean;
 };
 
 export const authApi = {
@@ -71,7 +76,7 @@ export const authApi = {
     });
   },
 
-  updateProfile(token: string, payload: Record<string, any>) {
+  updateProfile(token: string, payload: Record<string, unknown>) {
     return apiRequest<{ message: string; profile: FarmerProfile }>('/auth/profile', {
       method: 'PUT',
       token,
@@ -84,6 +89,40 @@ export const authApi = {
       method: 'POST',
       token,
       body: payload,
+    });
+  },
+
+  async getLegalVersions() {
+    const metadata = await apiRequest<{
+      terms: { version: string };
+      privacy: { version: string };
+    }>('/legal');
+
+    return {
+      termsVersion: metadata.terms.version,
+      privacyVersion: metadata.privacy.version,
+    };
+  },
+
+  exportAccountData(token: string) {
+    return apiTextRequest('/privacy/export', {
+      token,
+      timeoutMs: 90000,
+    });
+  },
+
+  clearHistories(token: string) {
+    return apiRequest<{ message: string }>('/privacy/histories', {
+      method: 'DELETE',
+      token,
+    });
+  },
+
+  deleteAccount(token: string, password: string) {
+    return apiRequest<{ message: string }>('/auth/account', {
+      method: 'DELETE',
+      token,
+      body: { password },
     });
   },
 };

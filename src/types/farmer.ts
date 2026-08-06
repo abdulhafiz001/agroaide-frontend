@@ -18,6 +18,9 @@ export interface FarmerProfile {
   avatarColor: string;
   preferredTheme: 'light' | 'dark' | 'field';
   preferredLanguage: SupportedLanguage;
+  aiDetailLevel?: 'concise' | 'balanced' | 'deep';
+  aiTone?: 'cautious' | 'balanced' | 'bold';
+  aiVoiceTips?: boolean;
   notificationPreferences?: {
     severeWeather: boolean;
     aiInsights: boolean;

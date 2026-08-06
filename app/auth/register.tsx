@@ -1,4 +1,4 @@
-import { useMutation } from '@tanstack/react-query';
+import { useMutation, useQuery } from '@tanstack/react-query';
 import { Link, useRouter } from 'expo-router';
 import * as Location from 'expo-location';
 import React, { useCallback, useMemo, useRef, useState } from 'react';
@@ -16,18 +16,20 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { LocationMapPreview } from '@/components/LocationMapPreview';
 import type { LeafletMapHandle } from '@/components/LeafletMap';
-import styled from '@/design-system/styled';
-import { useTheme } from 'styled-components/native';
+import styled, { useTheme } from '@/design-system/styled';
+
 
 import { useToast } from '@/components/Toast';
 import { Button, Chip, InputField, Surface, Text } from '@/design-system/components';
 import { ApiError } from '@/services/apiClient';
 import { authApi } from '@/services/authApi';
+import { clearAllSyncActions } from '@/services/syncQueue';
 import { useAppStore } from '@/store/useAppStore';
 import type { ExperienceLevel } from '@/types/farmer';
 import { isFarmProfileComplete } from '@/utils/farmProfile';
 import { formatSquareSidesFt } from '@/utils/formatters';
 import { clearAuthQueryCache } from '@/utils/queryClient';
+import { authStorage } from '@/utils/authStorage';
 
 const LOCATIONIQ_KEY = process.env.EXPO_PUBLIC_LOCATIONIQ_KEY || '';
 
@@ -77,6 +79,14 @@ const SearchResultItem = styled.TouchableOpacity`
   border-bottom-color: ${({ theme }) => theme.colors.border};
 `;
 
+const ConsentRow = styled.Pressable`
+  min-height: 44px;
+  flex-direction: row;
+  align-items: flex-start;
+  gap: 10px;
+  padding-vertical: 6px;
+`;
+
 type LocationResult = {
   place_id: string;
   display_name: string;
@@ -102,6 +112,9 @@ type RegistrationForm = {
   irrigationAccess: string;
   crops: string;
   experienceLevel: ExperienceLevel;
+  acceptedTerms: boolean;
+  acceptedPrivacy: boolean;
+  researchConsent: boolean;
 };
 
 const initialForm: RegistrationForm = {
@@ -119,9 +132,10 @@ const initialForm: RegistrationForm = {
   irrigationAccess: 'drip',
   crops: '',
   experienceLevel: 'beginner',
+  acceptedTerms: false,
+  acceptedPrivacy: false,
+  researchConsent: false,
 };
-
-const TOTAL_STEPS = 3;
 
 export default function RegisterScreen() {
   const router = useRouter();
@@ -134,6 +148,14 @@ export default function RegisterScreen() {
   const [form, setForm] = useState<RegistrationForm>(initialForm);
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const legalVersionsQuery = useQuery({
+    queryKey: ['legalVersions'],
+    queryFn: () => authApi.getLegalVersions(),
+    retry: 1,
+    staleTime: 5 * 60 * 1000,
+  });
+  const legalVersions = legalVersionsQuery.data;
+  const legalVersionsConfirmed = Boolean(legalVersions?.termsVersion && legalVersions?.privacyVersion);
 
   const [locationQuery, setLocationQuery] = useState('');
   const [locationResults, setLocationResults] = useState<LocationResult[]>([]);
@@ -241,6 +263,9 @@ export default function RegisterScreen() {
 
   const mutation = useMutation({
     mutationFn: () => {
+      if (!legalVersionsConfirmed || !legalVersions) {
+        throw new Error('Current legal terms could not be confirmed.');
+      }
       const irrigationAccess = irrigationOptions.includes(form.irrigationAccess as any)
         ? (form.irrigationAccess as (typeof irrigationOptions)[number])
         : 'drip';
@@ -264,13 +289,21 @@ export default function RegisterScreen() {
         ...(crops?.length ? { crops } : {}),
         ...(form.experienceLevel ? { experienceLevel: form.experienceLevel } : {}),
         ...(irrigationAccess ? { irrigationAccess } : {}),
+        acceptedTerms: true,
+        acceptedPrivacy: true,
+        termsVersion: legalVersions.termsVersion,
+        privacyVersion: legalVersions.privacyVersion,
+        researchConsent: form.researchConsent,
       });
     },
     onMutate: () => setAuthState({ status: 'authenticating' }),
-    onSuccess: (response) => {
+    onSuccess: async (response) => {
       clearAuthQueryCache();
+      await clearAllSyncActions();
+      await authStorage.saveToken(response.token);
       setAuthState({ status: 'authenticated', token: response.token });
       setProfile(response.profile);
+      console.info('[auth] registration completed');
       toast.success('Account created', 'Welcome to AgroAide. Check your email for a welcome message.');
       if (!isFarmProfileComplete(response.profile)) {
         router.replace('/auth/complete-farm');
@@ -291,6 +324,7 @@ export default function RegisterScreen() {
       form.fullName && form.email && form.password && form.passwordConfirmation && form.password === form.passwordConfirmation,
     );
   }, [form.fullName, form.email, form.password, form.passwordConfirmation]);
+  const canCreateAccount = form.acceptedTerms && form.acceptedPrivacy && legalVersionsConfirmed;
 
   const renderStepIndicator = () => (
     <StepRow>
@@ -322,7 +356,12 @@ export default function RegisterScreen() {
         onChangeText={(t) => updateForm('password', t)}
         secureTextEntry={!showPassword}
         rightElement={
-          <Pressable onPress={() => setShowPassword((p) => !p)} hitSlop={8}>
+          <Pressable
+            onPress={() => setShowPassword((p) => !p)}
+            hitSlop={8}
+            accessibilityRole="button"
+            accessibilityLabel={showPassword ? 'Hide password' : 'Show password'}
+            accessibilityState={{ expanded: showPassword }}>
             <Ionicons
               name={showPassword ? 'eye-off-outline' : 'eye-outline'}
               size={20}
@@ -337,7 +376,12 @@ export default function RegisterScreen() {
         onChangeText={(t) => updateForm('passwordConfirmation', t)}
         secureTextEntry={!showConfirmPassword}
         rightElement={
-          <Pressable onPress={() => setShowConfirmPassword((p) => !p)} hitSlop={8}>
+          <Pressable
+            onPress={() => setShowConfirmPassword((p) => !p)}
+            hitSlop={8}
+            accessibilityRole="button"
+            accessibilityLabel={showConfirmPassword ? 'Hide confirmed password' : 'Show confirmed password'}
+            accessibilityState={{ expanded: showConfirmPassword }}>
             <Ionicons
               name={showConfirmPassword ? 'eye-off-outline' : 'eye-outline'}
               size={20}
@@ -478,12 +522,69 @@ export default function RegisterScreen() {
         </>
       )}
 
+      <Surface variant="muted" rounded="lg" style={{ gap: 4 }}>
+        {legalVersionsQuery.isLoading ? (
+          <View
+            style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 8 }}
+            accessibilityLiveRegion="polite">
+            <ActivityIndicator size="small" color={theme.colors.primary} />
+            <Text variant="caption" tone="muted">Confirming the current terms and privacy notice…</Text>
+          </View>
+        ) : legalVersionsQuery.isError || !legalVersionsConfirmed ? (
+          <Surface variant="transparent" style={{ gap: 8, paddingVertical: 8 }}>
+            <Text variant="caption" tone="danger">
+              We could not confirm the current legal documents. Check your connection, then try again.
+            </Text>
+            <Button
+              label="Try again"
+              variant="secondary"
+              onPress={() => legalVersionsQuery.refetch()}
+              loading={legalVersionsQuery.isFetching}
+            />
+          </Surface>
+        ) : (
+          <Text variant="caption" tone="muted" style={{ paddingVertical: 4 }}>
+            Current terms and privacy notice confirmed.
+          </Text>
+        )}
+        <ConsentRow
+          onPress={() => updateForm('acceptedTerms', !form.acceptedTerms)}
+          accessibilityRole="checkbox"
+          accessibilityState={{ checked: form.acceptedTerms }}>
+          <Ionicons name={form.acceptedTerms ? 'checkbox' : 'square-outline'} size={24} color={theme.colors.primary} />
+          <Text variant="caption" style={{ flex: 1 }}>
+            I accept the{' '}
+            <Text variant="caption" tone="accent" onPress={() => router.push('/terms' as never)}>terms of use</Text>.
+          </Text>
+        </ConsentRow>
+        <ConsentRow
+          onPress={() => updateForm('acceptedPrivacy', !form.acceptedPrivacy)}
+          accessibilityRole="checkbox"
+          accessibilityState={{ checked: form.acceptedPrivacy }}>
+          <Ionicons name={form.acceptedPrivacy ? 'checkbox' : 'square-outline'} size={24} color={theme.colors.primary} />
+          <Text variant="caption" style={{ flex: 1 }}>
+            I have read the{' '}
+            <Text variant="caption" tone="accent" onPress={() => router.push('/privacy' as never)}>privacy notice</Text>.
+          </Text>
+        </ConsentRow>
+        <ConsentRow
+          onPress={() => updateForm('researchConsent', !form.researchConsent)}
+          accessibilityRole="checkbox"
+          accessibilityState={{ checked: form.researchConsent }}>
+          <Ionicons name={form.researchConsent ? 'checkbox' : 'square-outline'} size={24} color={theme.colors.primary} />
+          <Text variant="caption" style={{ flex: 1 }}>
+            Optional: I consent to my de-identified app-use data being used for academic research.
+          </Text>
+        </ConsentRow>
+      </Surface>
+
       <ButtonRow>
         <Button label="Back" variant="outline" onPress={() => animateStep(2)} style={{ flex: 1 }} />
         <Button
           label="Create account"
           onPress={() => mutation.mutate()}
           loading={mutation.isPending}
+          disabled={!canCreateAccount}
           style={{ flex: 1 }}
         />
       </ButtonRow>

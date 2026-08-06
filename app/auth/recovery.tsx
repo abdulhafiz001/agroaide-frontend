@@ -3,8 +3,8 @@ import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import React, { useState } from 'react';
 import { KeyboardAvoidingView, Platform, Pressable } from 'react-native';
-import styled from '@/design-system/styled';
-import { useTheme } from 'styled-components/native';
+import styled, { useTheme } from '@/design-system/styled';
+
 
 import { useToast } from '@/components/Toast';
 import { Button, InputField, Surface, Text } from '@/design-system/components';

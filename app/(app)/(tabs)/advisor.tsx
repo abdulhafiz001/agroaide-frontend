@@ -18,13 +18,13 @@ import {
   View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useTheme } from 'styled-components/native';
+import styled, { useTheme } from '@/design-system/styled';
 
 import { AuthenticatedImage } from '@/components/AuthenticatedImage';
 import { FormattedMessage } from '@/components/FormattedMessage';
 import { useToast } from '@/components/Toast';
 import { Chip, Surface, Text } from '@/design-system/components';
-import styled from '@/design-system/styled';
+
 import { advisorApi } from '@/services/advisorApi';
 import { farmScanApi, type ScanDetail } from '@/services/farmScanApi';
 import { weatherApi } from '@/services/weatherApi';
@@ -211,12 +211,15 @@ export default function ModernAdvisorScreen() {
   const { t, lang } = useTranslation();
   const accessToken = useAppStore((state) => state.accessToken);
   const profile = useAppStore((state) => state.farmerProfile);
+  const aiAdvisorPreference = useAppStore((state) => state.aiAdvisorPreference);
+  const personalDataRevision = useAppStore((state) => state.personalDataRevision);
   const audioRecorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
   const recorderState = useAudioRecorderState(audioRecorder);
   const listRef = useRef<any>(null);
   const handledScanIdRef = useRef<string | null>(null);
   const isRecordingRef = useRef(false);
   const voiceBusyRef = useRef(false);
+  const lastPersonalDataRevision = useRef(personalDataRevision);
 
   const firstName = profile?.fullName?.trim().split(' ')[0];
   const [messages, setMessages] = useState<Message[]>([buildIntro(firstName)]);
@@ -228,9 +231,16 @@ export default function ModernAdvisorScreen() {
   const [activeSuggestion, setActiveSuggestion] = useState<string | null>(null);
   const [activeScan, setActiveScan] = useState<ScanDetail | null>(null);
   const [keyboardHeight, setKeyboardHeight] = useState(0);
+  const requestPreferences = useMemo(
+    () => ({
+      ...aiAdvisorPreference,
+      language: profile?.preferredLanguage ?? lang,
+    }),
+    [aiAdvisorPreference, lang, profile?.preferredLanguage],
+  );
 
   const chatMutation = useMutation({
-    mutationFn: (message: string) => advisorApi.chat(message, accessToken ?? ''),
+    mutationFn: (message: string) => advisorApi.chat(message, accessToken ?? '', requestPreferences),
   });
 
   const historyQuery = useQuery({
@@ -262,6 +272,16 @@ export default function ModernAdvisorScreen() {
   const suggestions = suggestionsQuery.data?.suggestions ?? [];
   const weatherSummary = weatherQuery.data?.weatherForecast?.[0];
   const hasUserMessages = useMemo(() => messages.some((m) => !m.fromAgent), [messages]);
+
+  useEffect(() => {
+    if (lastPersonalDataRevision.current === personalDataRevision) return;
+    lastPersonalDataRevision.current = personalDataRevision;
+    setMessages([buildIntro(firstName)]);
+    setHistoryLoaded(true);
+    setInput('');
+    setActiveScan(null);
+    handledScanIdRef.current = null;
+  }, [firstName, personalDataRevision]);
 
   useEffect(() => {
     if (!historyQuery.data || historyLoaded) return;
@@ -365,7 +385,7 @@ export default function ModernAdvisorScreen() {
       reader.onloadend = async () => {
         const base64 = reader.result as string;
         try {
-          const result = await advisorApi.transcribeVoice(base64, accessToken ?? '', lang);
+          const result = await advisorApi.transcribeVoice(base64, accessToken ?? '', requestPreferences);
           if (result.success && result.text) {
             setInput(result.text);
           } else {
@@ -634,7 +654,10 @@ export default function ModernAdvisorScreen() {
             paddingBottom: keyboardHeight > 0 ? 10 : Math.max(insets.bottom, 12),
           }}
         >
-          <AttachmentButton onPress={() => router.push('/farm-scan')}>
+          <AttachmentButton
+            onPress={() => router.push('/farm-scan')}
+            accessibilityRole="button"
+            accessibilityLabel="Attach a crop scan">
             <Ionicons name="scan" size={20} color={theme.colors.accent} />
           </AttachmentButton>
           <ChatInput
@@ -653,13 +676,20 @@ export default function ModernAdvisorScreen() {
               <Ionicons name="hourglass-outline" size={22} color={theme.colors.accent} />
             </View>
           ) : input.trim() ? (
-            <TouchableOpacity style={{ marginLeft: 12, padding: 12 }} onPress={() => sendMessage(input)}>
+            <TouchableOpacity
+              style={{ marginLeft: 12, padding: 12 }}
+              onPress={() => sendMessage(input)}
+              accessibilityRole="button"
+              accessibilityLabel="Send message">
               <Ionicons name="send" size={24} color={theme.colors.primary} />
             </TouchableOpacity>
           ) : (
             <VoiceButton
               onPress={toggleRecording}
               style={isRecordingUi ? { backgroundColor: theme.colors.danger } : undefined}
+              accessibilityRole="button"
+              accessibilityLabel={isRecordingUi ? 'Stop voice recording' : 'Start voice recording'}
+              accessibilityState={{ busy: isTranscribing }}
             >
               <Ionicons name={isRecordingUi ? 'mic' : 'mic-outline'} size={22} color="#FFF" />
             </VoiceButton>

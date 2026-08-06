@@ -7,12 +7,19 @@ export type AdvisorMessage = {
   timestamp?: string;
 };
 
+export type AdvisorRequestPreferences = {
+  detailLevel: 'concise' | 'balanced' | 'deep';
+  tone: 'cautious' | 'balanced' | 'bold';
+  voiceTips: boolean;
+  language: string;
+};
+
 export const advisorApi = {
-  chat(message: string, token: string) {
+  chat(message: string, token: string, preferences: AdvisorRequestPreferences) {
     return apiRequest<{ reply: string }>('/advisor/chat', {
       method: 'POST',
       token,
-      body: { message },
+      body: { message, ...preferences },
       timeoutMs: 60000,
     });
   },
@@ -31,12 +38,12 @@ export const advisorApi = {
     });
   },
 
-  transcribeVoice(audioBase64: string, token: string, languageHint?: string) {
+  transcribeVoice(audioBase64: string, token: string, preferences: AdvisorRequestPreferences) {
     return apiRequest<{ success: boolean; text?: string; error?: string }>('/advisor/transcribe', {
       method: 'POST',
       token,
       timeoutMs: 30000,
-      body: { audioBase64, languageHint },
+      body: { audioBase64, ...preferences, languageHint: preferences.language },
     });
   },
 };

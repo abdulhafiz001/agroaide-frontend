@@ -1,0 +1,12 @@
+appId: com.ahz.agroaide
+---
+- launchApp:
+    clearState: true
+- assertVisible: "Sign in to AgroAide"
+- tapOn: "Create account"
+- assertVisible: "Join AgroAide"
+- tapOn: "terms of use"
+- assertVisible: "Terms of use"
+- back
+- tapOn: "privacy notice"
+- assertVisible: "Privacy notice"

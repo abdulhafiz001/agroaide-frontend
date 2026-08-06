@@ -13,12 +13,12 @@ import {
 } from 'react-native';
 import { Calendar } from 'react-native-calendars';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useTheme } from 'styled-components/native';
+import styled, { useTheme } from '@/design-system/styled';
 
 import { ConfirmModal } from '@/components/ConfirmModal';
 import { useToast } from '@/components/Toast';
 import { Button, Chip, InputField, Surface, Text } from '@/design-system/components';
-import styled from '@/design-system/styled';
+
 import { useTranslation } from '@/i18n/useTranslation';
 import { calendarApi, type CalendarTask } from '@/services/calendarApi';
 import { isOfflineQueuedError, withOfflineQueue } from '@/services/offlineQueue';
@@ -80,12 +80,6 @@ const FAB = styled(TouchableOpacity)`
 const periods = ['morning', 'afternoon', 'evening'] as const;
 const impacts = ['low', 'medium', 'high'] as const;
 
-const impactColors: Record<string, string> = {
-  high: '#e63946',
-  medium: '#db9534',
-  low: '#57b346',
-};
-
 type WatchItem = {
   id: string;
   crop: string;
@@ -128,7 +122,7 @@ export default function CalendarScreen() {
     }
   }, [focusDate]);
 
-  const { data, isLoading, refetch } = useQuery({
+  const { data, isLoading } = useQuery({
     queryKey: ['calendar', selectedDate],
     queryFn: () => calendarApi.getCalendar(token, selectedDate),
     enabled: Boolean(token),
@@ -579,10 +573,16 @@ export default function CalendarScreen() {
                     ) : null}
                   </View>
                   <View style={{ flexDirection: 'row', gap: 8 }}>
-                    <TouchableOpacity onPress={() => openEdit(task)}>
+                    <TouchableOpacity
+                      onPress={() => openEdit(task)}
+                      accessibilityRole="button"
+                      accessibilityLabel={`Edit ${task.title}`}>
                       <Ionicons name="create-outline" size={20} color={theme.colors.primary} />
                     </TouchableOpacity>
-                    <TouchableOpacity onPress={() => confirmDelete(task.id, task.title)}>
+                    <TouchableOpacity
+                      onPress={() => confirmDelete(task.id, task.title)}
+                      accessibilityRole="button"
+                      accessibilityLabel={`Delete ${task.title}`}>
                       <Ionicons name="trash-outline" size={20} color="#e63946" />
                     </TouchableOpacity>
                   </View>
@@ -598,6 +598,9 @@ export default function CalendarScreen() {
                 <TouchableOpacity
                   style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingTop: 4 }}
                   onPress={() => completeMutation.mutate({ id: task.id, completed: !task.completed })}
+                  accessibilityRole="checkbox"
+                  accessibilityLabel={`${task.title} completed`}
+                  accessibilityState={{ checked: task.completed }}
                 >
                   <Ionicons
                     name={task.completed ? 'checkmark-circle' : 'ellipse-outline'}
@@ -614,7 +617,7 @@ export default function CalendarScreen() {
         </Section>
       </Container>
 
-      <FAB onPress={openAdd}>
+      <FAB onPress={openAdd} accessibilityRole="button" accessibilityLabel={t('addTask')}>
         <Ionicons name="add" size={28} color="#fff" />
       </FAB>
 

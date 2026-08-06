@@ -1,4 +1,5 @@
 import { apiRequest } from '@/services/apiClient';
+import type { ScanVerificationStatus } from '@/utils/scanStatus';
 
 export type DiseaseInfo = {
   name: string;
@@ -51,6 +52,10 @@ export type ScanHistoryItem = {
   summary?: string;
   confidencePercent?: number | null;
   imagePath?: string | null;
+  status?: ScanVerificationStatus;
+  verificationStatus?: ScanVerificationStatus;
+  verifiedAt?: string | null;
+  feedback?: { accurate: boolean; reason?: string | null } | null;
 };
 
 export type ScanDetail = ScanHistoryItem & {
@@ -60,7 +65,7 @@ export type ScanDetail = ScanHistoryItem & {
 
 export const farmScanApi = {
   analyzeImage(token: string, imageBase64: string, farmFieldId?: string) {
-    return apiRequest<{ scanId: string; analysis: ScanResult }>('/farm/analyze-image', {
+    return apiRequest<{ scanId: string; status: ScanVerificationStatus; analysis?: ScanResult }>('/farm/analyze-image', {
       method: 'POST',
       token,
       timeoutMs: 120000,
@@ -82,6 +87,21 @@ export const farmScanApi = {
     return apiRequest<{ scan: ScanDetail }>(`/farm/scan-history/${scanId}`, {
       method: 'GET',
       token,
+    });
+  },
+
+  getScanStatus(token: string, scanId: string) {
+    return apiRequest<{ scan: ScanDetail }>(`/farm/scan-history/${scanId}/status`, {
+      method: 'GET',
+      token,
+    });
+  },
+
+  submitFeedback(token: string, scanId: string, payload: { accurate: boolean; reason?: string }) {
+    return apiRequest<{ message: string; scan: ScanDetail }>(`/farm/scan-history/${scanId}/feedback`, {
+      method: 'POST',
+      token,
+      body: payload,
     });
   },
 };

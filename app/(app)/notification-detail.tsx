@@ -2,13 +2,12 @@ import { Ionicons } from '@expo/vector-icons';
 import { useMutation } from '@tanstack/react-query';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import React from 'react';
-import { ScrollView, TouchableOpacity, View } from 'react-native';
+import { ScrollView, TouchableOpacity } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useTheme } from 'styled-components/native';
+import styled from '@/design-system/styled';
 
 import { useToast } from '@/components/Toast';
 import { Button, Chip, Surface, Text } from '@/design-system/components';
-import styled from '@/design-system/styled';
 import { calendarApi } from '@/services/calendarApi';
 import { useAppStore } from '@/store/useAppStore';
 import { scheduleLocalPlantingReminders } from '@/utils/localPlantingReminders';
@@ -27,7 +26,6 @@ const HeaderBar = styled.View`
 `;
 
 export default function NotificationDetailScreen() {
-  const theme = useTheme();
   const router = useRouter();
   const toast = useToast();
   const token = useAppStore((s) => s.accessToken) ?? '';

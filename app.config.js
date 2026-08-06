@@ -69,6 +69,7 @@ const config = {
     ],
     'expo-audio',
     'expo-asset',
+    'expo-secure-store',
     'expo-sqlite',
     [
       'expo-notifications',

@@ -1,3 +1,5 @@
+import * as Device from 'expo-device';
+import * as Notifications from 'expo-notifications';
 import { useEffect, useRef } from 'react';
 import { Platform } from 'react-native';
 import Constants from 'expo-constants';
@@ -11,18 +13,15 @@ const isExpoGo = Constants.appOwnership === 'expo';
 
 function setupNotificationHandler() {
   if (isExpoGo) return;
-  try {
-    const Notifications = require('expo-notifications');
-    Notifications.setNotificationHandler({
-      handleNotification: async () => ({
-        shouldShowAlert: true,
-        shouldPlaySound: true,
-        shouldSetBadge: true,
-      }),
-    });
-  } catch {
-    // expo-notifications not available
-  }
+  Notifications.setNotificationHandler({
+    handleNotification: async () => ({
+      shouldShowAlert: true,
+      shouldShowBanner: true,
+      shouldShowList: true,
+      shouldPlaySound: true,
+      shouldSetBadge: true,
+    }),
+  });
 }
 
 setupNotificationHandler();
@@ -31,10 +30,7 @@ async function registerForPushNotifications(): Promise<string | null> {
   if (isExpoGo) return null;
 
   try {
-    const Device = require('expo-device');
     if (!Device.isDevice) return null;
-
-    const Notifications = require('expo-notifications');
 
     const { status: existingStatus } = await Notifications.getPermissionsAsync();
     let finalStatus = existingStatus;
@@ -83,7 +79,7 @@ export function usePushNotifications() {
   const accessToken = useAppStore((s) => s.accessToken);
   const authStatus = useAppStore((s) => s.authStatus);
   const notificationPreferences = useAppStore((s) => s.notificationPreferences);
-  const responseListener = useRef<any>();
+  const responseListener = useRef<any>(null);
   const handledColdStartRef = useRef(false);
 
   useEffect(() => {
@@ -102,8 +98,6 @@ export function usePushNotifications() {
     });
 
     try {
-      const Notifications = require('expo-notifications');
-
       // Cold start: app opened from a killed state by tapping a notification
       if (!handledColdStartRef.current) {
         handledColdStartRef.current = true;
@@ -121,12 +115,7 @@ export function usePushNotifications() {
 
     return () => {
       if (responseListener.current) {
-        try {
-          const Notifications = require('expo-notifications');
-          Notifications.removeNotificationSubscription(responseListener.current);
-        } catch {
-          // Cleanup failed silently
-        }
+        responseListener.current.remove();
       }
     };
   }, [authStatus, accessToken, router, notificationPreferences]);

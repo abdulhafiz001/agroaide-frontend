@@ -4,11 +4,11 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useMemo } from 'react';
 import { ActivityIndicator, ScrollView, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useTheme } from 'styled-components/native';
+import styled, { useTheme } from '@/design-system/styled';
 
 import { LeafletMap } from '@/components/LeafletMap';
 import { Chip, Surface, Text } from '@/design-system/components';
-import styled from '@/design-system/styled';
+
 import { outbreakApi } from '@/services/outbreakApi';
 import { useAppStore } from '@/store/useAppStore';
 import { useTranslation } from '@/i18n/useTranslation';
@@ -75,7 +75,7 @@ export default function OutbreakMapScreen() {
     enabled: Boolean(token),
   });
 
-  const points = data?.points ?? [];
+  const points = useMemo(() => data?.points ?? [], [data?.points]);
   const alerts = alertsData?.alerts ?? [];
 
   const farmLat = profile?.farmLatitude ?? 9.06;

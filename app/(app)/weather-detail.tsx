@@ -4,10 +4,10 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useMemo } from 'react';
 import { ActivityIndicator, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useTheme } from 'styled-components/native';
+import styled, { useTheme } from '@/design-system/styled';
 
 import { Chip, Surface, Text } from '@/design-system/components';
-import styled from '@/design-system/styled';
+
 import { weatherApi } from '@/services/weatherApi';
 import { useAppStore } from '@/store/useAppStore';
 
@@ -71,7 +71,7 @@ export default function WeatherDetailScreen() {
   const forecast = data?.weatherForecast ?? [];
   const hourly = (data?.hourly ?? []).slice(0, 8);
   const soilHealth = data?.soilHealth ?? [];
-  const alerts = data?.alerts ?? [];
+  const alerts = useMemo(() => data?.alerts ?? [], [data?.alerts]);
 
   const pushAlert = useMemo(() => {
     if (!params.title && !params.message) return null;

@@ -77,14 +77,14 @@ export function filterGpsStream(
 
 export function pointsToGeoJsonPolygon(points: GpsPoint[]): {
   type: 'Polygon';
-  coordinates: number[][][];
+  coordinates: [number, number][][];
 } {
-  const ring = points.map((p) => [p.longitude, p.latitude]);
+  const ring: [number, number][] = points.map((p) => [p.longitude, p.latitude]);
   if (ring.length > 0) {
     const first = ring[0];
     const last = ring[ring.length - 1];
     if (first[0] !== last[0] || first[1] !== last[1]) {
-      ring.push([...first]);
+      ring.push([first[0], first[1]]);
     }
   }
   return { type: 'Polygon', coordinates: [ring] };

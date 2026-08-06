@@ -15,14 +15,14 @@ export type CalendarTask = {
 export type CalendarResponse = {
   tasks: CalendarTask[];
   dayPlan: CalendarTask[];
-  dayReminders?: Array<{
+  dayReminders?: {
     id: string;
     crop: string;
     plantOn: string;
     kind: string;
     title: string;
     description: string;
-  }>;
+  }[];
   markedDates: Record<string, { marked: boolean; dotColor: string; plantingReminder?: boolean }>;
   selectedDate: string;
 };
@@ -83,25 +83,25 @@ export const calendarApi = {
       zone: string;
       zoneLabel: string;
       season: { zone: string; season: string; isRainy: boolean; rainyMonths: number[]; month: number };
-      suggestions: Array<{
+      suggestions: {
         crop: string;
         plantingMonths: number[];
         plantingWindowActive: boolean;
-        stages: Array<{
+        stages: {
           stage: string;
           offsetDays: number;
           dueDate: string | null;
           isDue: boolean;
           isPast: boolean;
-        }>;
+        }[];
         fieldId: string | null;
-      }>;
+      }[];
     }>(`/calendar/seasonal-suggestions${qs ? `?${qs}` : ''}`, { token });
   },
 
   listCropWatches(token: string) {
     return apiRequest<{
-      watches: Array<{
+      watches: {
         id: string;
         crop: string;
         notifyWhenPlantingWindow: boolean;
@@ -109,7 +109,7 @@ export const calendarApi = {
         status?: string;
         bestPlantDate?: string | null;
         lastAnalysisStatus?: string | null;
-      }>;
+      }[];
     }>('/calendar/crop-watches', { token });
   },
 
@@ -133,7 +133,7 @@ export const calendarApi = {
   ) {
     return apiRequest<{
       reminder: { id: string; crop: string; plantOn: string; remind2dAt: string; remindOnAt: string };
-      localSchedule: Array<{ id: string; title: string; body: string; triggerAt: string }>;
+      localSchedule: { id: string; title: string; body: string; triggerAt: string }[];
     }>('/calendar/planting-reminders', {
       method: 'POST',
       token,

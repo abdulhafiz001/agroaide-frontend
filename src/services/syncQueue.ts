@@ -5,6 +5,8 @@ export type SyncActionType =
   | 'field.update'
   | 'field.delete'
   | 'journal.create'
+  | 'journal.update'
+  | 'journal.delete'
   | 'task.create'
   | 'task.update'
   | 'task.complete'
@@ -12,7 +14,8 @@ export type SyncActionType =
   | 'transaction.create'
   | 'transaction.update'
   | 'transaction.delete'
-  | 'boundary.update';
+  | 'boundary.update'
+  | 'boundary.delete';
 
 export type SyncAction = {
   uuid: string;
@@ -52,7 +55,7 @@ export async function enqueueSyncAction(action: SyncAction): Promise<void> {
   const db = await getDb();
   await db.runAsync(
     `INSERT OR REPLACE INTO sync_actions (uuid, client_timestamp, action_type, payload, synced, attempts, last_error)
-     VALUES (?, ?, ?, ?, 0, COALESCE ?, ?)`,
+     VALUES (?, ?, ?, ?, 0, ?, ?)`,
     action.uuid,
     action.clientTimestamp,
     action.actionType,
@@ -110,4 +113,9 @@ export async function markSyncActionFailed(uuid: string, error: string): Promise
 export async function clearSyncedActions(): Promise<void> {
   const db = await getDb();
   await db.runAsync('DELETE FROM sync_actions WHERE synced = 1');
+}
+
+export async function clearAllSyncActions(): Promise<void> {
+  const db = await getDb();
+  await db.runAsync('DELETE FROM sync_actions');
 }

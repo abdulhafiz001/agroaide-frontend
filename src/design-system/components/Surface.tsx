@@ -1,7 +1,6 @@
 import type { ViewProps } from 'react-native';
 import { Platform } from 'react-native';
-import styled from '@/design-system/styled';
-import { css } from 'styled-components/native';
+import styled, { css } from '@/design-system/styled';
 
 type SurfaceVariant = 'default' | 'muted' | 'elevated' | 'transparent';
 type SpacingScale = 'none' | 'xxs' | 'xs' | 'sm' | 'md' | 'lg' | 'xl';

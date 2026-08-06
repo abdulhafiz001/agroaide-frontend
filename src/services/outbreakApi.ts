@@ -21,9 +21,20 @@ export type OutbreakAlert = {
   createdAt: string;
 };
 
+export type OutbreakGridCell = {
+  gridId: string;
+  north: number;
+  south: number;
+  east: number;
+  west: number;
+  reportCount: number;
+  diseases: { name: string; count: number; severity?: string }[];
+  updatedAt: string;
+};
+
 export const outbreakApi = {
   getHeatmap(token: string) {
-    return apiRequest<{ points: HeatmapPoint[] }>('/outbreak/heatmap', {
+    return apiRequest<{ points: HeatmapPoint[]; gridCells?: OutbreakGridCell[]; serverTime?: string }>('/outbreak/heatmap', {
       method: 'GET',
       token,
     });
