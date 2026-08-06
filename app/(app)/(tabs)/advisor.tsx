@@ -213,7 +213,26 @@ export default function ModernAdvisorScreen() {
   const profile = useAppStore((state) => state.farmerProfile);
   const aiAdvisorPreference = useAppStore((state) => state.aiAdvisorPreference);
   const personalDataRevision = useAppStore((state) => state.personalDataRevision);
-  const audioRecorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
+  // Prefer AAC/M4A so Groq Whisper accepts phone recordings (avoid CAF/PCM).
+  const audioRecorder = useAudioRecorder({
+    ...RecordingPresets.HIGH_QUALITY,
+    extension: '.m4a',
+    numberOfChannels: 1,
+    bitRate: 128000,
+    sampleRate: 44100,
+    android: {
+      ...RecordingPresets.HIGH_QUALITY.android,
+      extension: '.m4a',
+      outputFormat: 'mpeg4',
+      audioEncoder: 'aac',
+    },
+    ios: {
+      ...RecordingPresets.HIGH_QUALITY.ios,
+      extension: '.m4a',
+      outputFormat: 'aac',
+      audioQuality: 127,
+    },
+  } as typeof RecordingPresets.HIGH_QUALITY);
   const recorderState = useAudioRecorderState(audioRecorder);
   const listRef = useRef<any>(null);
   const handledScanIdRef = useRef<string | null>(null);
@@ -375,6 +394,8 @@ export default function ModernAdvisorScreen() {
       const uri = audioRecorder.uri;
       if (!uri) {
         setIsTranscribing(false);
+        voiceBusyRef.current = false;
+        toast.error('Recording failed', 'No audio was captured. Please try again.');
         return;
       }
 
@@ -382,8 +403,20 @@ export default function ModernAdvisorScreen() {
       const blob = await response.blob();
       const reader = new FileReader();
 
+      reader.onerror = () => {
+        setIsTranscribing(false);
+        voiceBusyRef.current = false;
+        toast.error('Error', 'Could not read the recording.');
+      };
+
       reader.onloadend = async () => {
         const base64 = reader.result as string;
+        if (!base64 || typeof base64 !== 'string' || !base64.includes('base64,')) {
+          setIsTranscribing(false);
+          voiceBusyRef.current = false;
+          toast.error('Recording failed', 'Could not encode the audio. Please try again.');
+          return;
+        }
         try {
           const result = await advisorApi.transcribeVoice(base64, accessToken ?? '', requestPreferences);
           if (result.success && result.text) {

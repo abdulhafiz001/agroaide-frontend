@@ -67,7 +67,11 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
   if (!response.ok) {
     const payload = (await response.json().catch(() => null)) as { message?: string; errors?: Record<string, string[]> } | null;
     const validationMessage = payload?.errors ? Object.values(payload.errors).flat()[0] : undefined;
-    throw new ApiError(validationMessage ?? payload?.message ?? 'Request failed.', response.status);
+    const fallback =
+      response.status === 400
+        ? 'Bad request. Check your API URL / server host settings and try again.'
+        : 'Request failed.';
+    throw new ApiError(validationMessage ?? payload?.message ?? fallback, response.status);
   }
 
   return (await response.json()) as T;

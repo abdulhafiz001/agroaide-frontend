@@ -62,9 +62,18 @@ export type ScanHistoryItem = {
 };
 
 export type ScanDetail = ScanHistoryItem & {
-  analysis: ScanResult;
+  analysis?: ScanResult | null;
   farmFieldId?: string | null;
 };
+
+/** True when the payload is a real completed analysis (not [] / null / incomplete). */
+export function isSuccessfulScanResult(analysis: unknown): analysis is ScanResult {
+  if (!analysis || typeof analysis !== 'object' || Array.isArray(analysis)) {
+    return false;
+  }
+  const value = analysis as Partial<ScanResult>;
+  return Boolean(value.condition && typeof value.summary === 'string' && value.summary.length > 0);
+}
 
 function normalizeScanStatus(scan: ScanHistoryItem): ScanVerificationStatus {
   if (scan.processingState === 'queued' || scan.processingState === 'processing' || scan.processingState === 'failed') {
@@ -76,10 +85,12 @@ function normalizeScanStatus(scan: ScanHistoryItem): ScanVerificationStatus {
       return 'verified';
     case 'needs_retake':
       return 'rejected';
-    case 'pending_review':
     case 'disputed':
       return 'needs_review';
+    case 'pending_review':
+    case 'auto_verified':
     default:
+      // Kindwise research-backed scans complete without an expert wait.
       return 'completed';
   }
 }
@@ -101,7 +112,11 @@ export const farmScanApi = {
       },
     });
     const scan = normalizeScan(response.scan);
-    return { scanId: response.scanId, status: scan.status!, analysis: scan.analysis };
+    return {
+      scanId: response.scanId,
+      status: scan.status!,
+      analysis: isSuccessfulScanResult(scan.analysis) ? scan.analysis : null,
+    };
   },
 
   async getHistory(token: string) {
@@ -117,15 +132,17 @@ export const farmScanApi = {
       method: 'GET',
       token,
     });
-    return { scan: normalizeScan(response.scan) };
+    const scan = normalizeScan(response.scan);
+    return {
+      scan: {
+        ...scan,
+        analysis: isSuccessfulScanResult(scan.analysis) ? scan.analysis : null,
+      },
+    };
   },
 
   async getScanStatus(token: string, scanId: string) {
-    const response = await apiRequest<{ scan: ScanDetail }>(`/farm/scans/${scanId}`, {
-      method: 'GET',
-      token,
-    });
-    return { scan: normalizeScan(response.scan) };
+    return this.getScan(token, scanId);
   },
 
   submitFeedback(token: string, scanId: string, payload: { accurate: boolean; reason?: string }) {
@@ -136,6 +153,13 @@ export const farmScanApi = {
         verdict: payload.accurate ? 'correct' : 'incorrect',
         comment: payload.reason,
       },
+    });
+  },
+
+  deleteScan(token: string, scanId: string) {
+    return apiRequest<{ message: string }>(`/farm/scan-history/${scanId}`, {
+      method: 'DELETE',
+      token,
     });
   },
 };

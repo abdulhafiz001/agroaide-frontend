@@ -17,11 +17,17 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import styled, { useTheme } from '@/design-system/styled';
 
 import { AuthenticatedImage } from '@/components/AuthenticatedImage';
+import { ConfirmModal } from '@/components/ConfirmModal';
 import { useToast } from '@/components/Toast';
 import { Button, Chip, InputField, Surface, Text } from '@/design-system/components';
 
 import { farmApi } from '@/services/farmApi';
-import { farmScanApi, type ScanHistoryItem, type ScanResult } from '@/services/farmScanApi';
+import {
+  farmScanApi,
+  isSuccessfulScanResult,
+  type ScanHistoryItem,
+  type ScanResult,
+} from '@/services/farmScanApi';
 import { useAppStore } from '@/store/useAppStore';
 import { useTranslation } from '@/i18n/useTranslation';
 import {
@@ -163,6 +169,7 @@ export default function FarmScanScreen() {
   const [scanStatus, setScanStatus] = useState<ScanVerificationStatus | null>(null);
   const [feedbackReason, setFeedbackReason] = useState('');
   const [showHistory, setShowHistory] = useState(false);
+  const [scanToDelete, setScanToDelete] = useState<ScanHistoryItem | null>(null);
   const [selectedFieldId, setSelectedFieldId] = useState<string | undefined>(params.fieldId);
   const [seenPersonalDataRevision, setSeenPersonalDataRevision] = useState(personalDataRevision);
 
@@ -199,7 +206,7 @@ export default function FarmScanScreen() {
         const scan = response.scan;
         setScanId(scan.id);
         setScanStatus(scan.verificationStatus ?? scan.status ?? 'completed');
-        setResult(scan.analysis);
+        setResult(isSuccessfulScanResult(scan.analysis) ? scan.analysis : null);
         setImageUri(scan.imagePath ?? null);
         setImageBase64(null);
         if (scan.farmFieldId) setSelectedFieldId(scan.farmFieldId);
@@ -223,9 +230,9 @@ export default function FarmScanScreen() {
       return farmScanApi.analyzeImage(token, imageBase64, selectedFieldId);
     },
     onSuccess: (data) => {
-      setResult(data.analysis ?? null);
+      setResult(isSuccessfulScanResult(data.analysis) ? data.analysis : null);
       setScanId(data.scanId ?? null);
-      setScanStatus(data.status ?? (data.analysis ? 'completed' : 'queued'));
+      setScanStatus(data.status ?? (isSuccessfulScanResult(data.analysis) ? 'completed' : 'queued'));
       queryClient.invalidateQueries({ queryKey: ['scanHistory'] });
     },
     onError: (error: Error) => {
@@ -246,8 +253,13 @@ export default function FarmScanScreen() {
   useEffect(() => {
     const scan = statusQuery.data?.scan;
     if (!scan) return;
-    setScanStatus(scan.verificationStatus ?? scan.status ?? 'completed');
-    if (scan.analysis) setResult(scan.analysis);
+    const nextStatus = scan.verificationStatus ?? scan.status ?? 'completed';
+    setScanStatus(nextStatus);
+    if (isSuccessfulScanResult(scan.analysis)) {
+      setResult(scan.analysis);
+    } else if (nextStatus === 'failed' || nextStatus === 'rejected') {
+      setResult(null);
+    }
   }, [statusQuery.data?.scan]);
 
   const feedbackMutation = useMutation({
@@ -262,6 +274,19 @@ export default function FarmScanScreen() {
       queryClient.invalidateQueries({ queryKey: ['scanHistory'] });
     },
     onError: () => toast.error('Could not send feedback', 'Please try again.'),
+  });
+
+  const deleteScanMutation = useMutation({
+    mutationFn: (id: string) => farmScanApi.deleteScan(token, id),
+    onSuccess: (_data, deletedId) => {
+      toast.success('Scan deleted', 'The scan and its image were removed.');
+      if (scanId === deletedId) {
+        resetScan();
+      }
+      setScanToDelete(null);
+      queryClient.invalidateQueries({ queryKey: ['scanHistory'] });
+    },
+    onError: () => toast.error('Could not delete scan', 'Please try again.'),
   });
 
   const pickImage = useCallback(
@@ -617,7 +642,7 @@ export default function FarmScanScreen() {
               </Surface>
             ) : null}
 
-            {scanId ? (
+            {scanId && result ? (
               <>
                 <Surface rounded="lg" variant="muted" style={{ marginTop: 20, gap: 10 }}>
                   <Text variant="headline">Was this scan accurate?</Text>
@@ -708,48 +733,66 @@ export default function FarmScanScreen() {
                   {history.map((item: ScanHistoryItem) => {
                     const itemCfg = conditionConfig[item.condition] || conditionConfig.unknown;
                     return (
-                      <TouchableOpacity
-                        key={item.id}
-                        onPress={() => loadScan(item.id)}
-                        activeOpacity={0.8}
-                        accessibilityRole="button"
-                        accessibilityLabel={`Open scan from ${new Date(item.date).toLocaleDateString()}`}>
-                        <Surface rounded="xl" style={{ flexDirection: 'row', gap: 12, alignItems: 'center' }}>
-                          {item.imagePath ? (
-                            <AuthenticatedImage
-                              uri={item.imagePath}
-                              style={{ width: 64, height: 64, borderRadius: 14 }}
-                              contentFit="cover"
-                            />
-                          ) : (
-                            <View
-                              style={{
-                                width: 64,
-                                height: 64,
-                                borderRadius: 14,
-                                backgroundColor: `${itemCfg.bg}33`,
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                              }}
-                            >
-                              <Ionicons name="leaf" size={22} color={itemCfg.bg} />
+                      <View key={item.id} style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                        <TouchableOpacity
+                          onPress={() => loadScan(item.id)}
+                          activeOpacity={0.8}
+                          style={{ flex: 1 }}
+                          accessibilityRole="button"
+                          accessibilityLabel={`Open scan from ${new Date(item.date).toLocaleDateString()}`}>
+                          <Surface rounded="xl" style={{ flexDirection: 'row', gap: 12, alignItems: 'center' }}>
+                            {item.imagePath ? (
+                              <AuthenticatedImage
+                                uri={item.imagePath}
+                                style={{ width: 64, height: 64, borderRadius: 14 }}
+                                contentFit="cover"
+                              />
+                            ) : (
+                              <View
+                                style={{
+                                  width: 64,
+                                  height: 64,
+                                  borderRadius: 14,
+                                  backgroundColor: `${itemCfg.bg}33`,
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                }}
+                              >
+                                <Ionicons name="leaf" size={22} color={itemCfg.bg} />
+                              </View>
+                            )}
+                            <View style={{ flex: 1, gap: 4 }}>
+                              <Text variant="headline" numberOfLines={1}>
+                                {item.diseaseName || item.conditionLabel || item.condition}
+                              </Text>
+                              <Text variant="caption" tone="muted" numberOfLines={2}>
+                                {item.summary || 'Open to view full scan details'}
+                              </Text>
+                              <Text variant="caption" tone="muted">
+                                {item.fieldName ? `${item.fieldName} · ` : ''}
+                                {new Date(item.date).toLocaleDateString()}
+                              </Text>
                             </View>
-                          )}
-                          <View style={{ flex: 1, gap: 4 }}>
-                            <Text variant="headline" numberOfLines={1}>
-                              {item.diseaseName || item.conditionLabel || item.condition}
-                            </Text>
-                            <Text variant="caption" tone="muted" numberOfLines={2}>
-                              {item.summary || 'Open to view full scan details'}
-                            </Text>
-                            <Text variant="caption" tone="muted">
-                              {item.fieldName ? `${item.fieldName} · ` : ''}
-                              {new Date(item.date).toLocaleDateString()}
-                            </Text>
-                          </View>
-                          <Ionicons name="chevron-forward" size={18} color={theme.colors.textSecondary} />
-                        </Surface>
-                      </TouchableOpacity>
+                            <Ionicons name="chevron-forward" size={18} color={theme.colors.textSecondary} />
+                          </Surface>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                          onPress={() => setScanToDelete(item)}
+                          hitSlop={10}
+                          accessibilityRole="button"
+                          accessibilityLabel="Delete scan"
+                          style={{
+                            width: 40,
+                            height: 40,
+                            borderRadius: 20,
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            backgroundColor: `${theme.colors.danger}14`,
+                          }}
+                        >
+                          <Ionicons name="trash-outline" size={18} color={theme.colors.danger} />
+                        </TouchableOpacity>
+                      </View>
                     );
                   })}
                 </View>
@@ -758,6 +801,19 @@ export default function FarmScanScreen() {
           </HistorySheet>
         </HistoryOverlay>
       </Modal>
+
+      <ConfirmModal
+        visible={Boolean(scanToDelete)}
+        title="Delete this scan?"
+        message="This permanently removes the scan result and the photo from AgroAide."
+        confirmLabel="Delete"
+        destructive
+        loading={deleteScanMutation.isPending}
+        onCancel={() => setScanToDelete(null)}
+        onConfirm={() => {
+          if (scanToDelete) deleteScanMutation.mutate(scanToDelete.id);
+        }}
+      />
     </Screen>
   );
 }
