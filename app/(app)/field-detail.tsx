@@ -13,7 +13,9 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import styled, { useTheme } from '@/design-system/styled';
 
+import { ConfirmModal } from '@/components/ConfirmModal';
 import { FarmMapView, type FarmMapViewHandle } from '@/components/FarmMapView';
+import { FormattedMessage } from '@/components/FormattedMessage';
 import { useToast } from '@/components/Toast';
 import { Button, Chip, InputField, Surface, Text } from '@/design-system/components';
 import { useTranslation } from '@/i18n/useTranslation';
@@ -65,11 +67,18 @@ export default function FieldDetailScreen() {
   const [rowInput, setRowInput] = useState('1');
   const [intraInput, setIntraInput] = useState('0.33');
   const [calcStep, setCalcStep] = useState(0);
+  const [estimateToDelete, setEstimateToDelete] = useState<string | null>(null);
 
   const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ['fieldDetail', fieldId],
     queryFn: () => farmApi.getField(token, String(fieldId)),
     enabled: Boolean(token && fieldId),
+  });
+
+  const estimateHistoryQuery = useQuery({
+    queryKey: ['inputEstimateHistory', fieldId],
+    queryFn: () => farmApi.inputEstimateHistory(token, String(fieldId)),
+    enabled: Boolean(token && fieldId && showCalc),
   });
 
   const field = data?.field;
@@ -143,9 +152,22 @@ export default function FieldDetailScreen() {
 
       return { estimate: localEstimate };
     },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['inputEstimateHistory', fieldId] });
+    },
     onError: (err: any) => {
       toast.error('Calculate failed', err?.message || 'Could not calculate. Check your connection and try again.');
     },
+  });
+
+  const deleteEstimateMutation = useMutation({
+    mutationFn: (id: string) => farmApi.deleteInputEstimate(token, id),
+    onSuccess: () => {
+      toast.success('Deleted', 'Calculation removed from history.');
+      setEstimateToDelete(null);
+      queryClient.invalidateQueries({ queryKey: ['inputEstimateHistory', fieldId] });
+    },
+    onError: () => toast.error('Could not delete', 'Please try again.'),
   });
 
   useEffect(() => {
@@ -463,16 +485,89 @@ export default function FieldDetailScreen() {
                   <Text variant="caption" tone="accent">
                     Farmer guide
                   </Text>
-                  <Text variant="body">{estimate.aiSummary}</Text>
+                  <FormattedMessage text={estimate.aiSummary || ''} />
                 </Surface>
                 <Text variant="caption" tone="muted">
                   {estimate.disclaimer}
                 </Text>
               </Surface>
             ) : null}
+
+            <Surface rounded="xl" style={{ gap: 10, marginTop: 8 }}>
+              <Text variant="headline">Calculation history</Text>
+              <Text variant="caption" tone="muted">
+                Saved estimates for this field. Tap trash to delete one.
+              </Text>
+              {estimateHistoryQuery.isLoading ? (
+                <ActivityIndicator color={theme.colors.primary} />
+              ) : (estimateHistoryQuery.data?.history ?? []).length === 0 ? (
+                <Text variant="caption" tone="muted">
+                  No saved calculations yet. Tap Calculate to save one.
+                </Text>
+              ) : (
+                (estimateHistoryQuery.data?.history ?? []).map((item) => (
+                  <View
+                    key={item.id}
+                    style={{
+                      flexDirection: 'row',
+                      gap: 10,
+                      alignItems: 'flex-start',
+                      borderTopWidth: 1,
+                      borderTopColor: `${theme.colors.border}66`,
+                      paddingTop: 10,
+                    }}
+                  >
+                    <View style={{ flex: 1, gap: 4 }}>
+                      <Text variant="headline">
+                        {item.crop || 'Crop'} · {item.population?.toLocaleString() ?? '—'} stands
+                      </Text>
+                      <Text variant="caption" tone="muted">
+                        {item.rowCm} cm × {item.intraCm} cm
+                        {item.date ? ` · ${new Date(item.date).toLocaleString()}` : ''}
+                      </Text>
+                      {item.aiSummary ? (
+                        <FormattedMessage
+                          text={item.aiSummary}
+                          style={{ color: theme.colors.textSecondary, fontSize: 13 }}
+                        />
+                      ) : null}
+                    </View>
+                    <TouchableOpacity
+                      onPress={() => setEstimateToDelete(item.id)}
+                      hitSlop={10}
+                      accessibilityRole="button"
+                      accessibilityLabel="Delete calculation"
+                      style={{
+                        width: 36,
+                        height: 36,
+                        borderRadius: 18,
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        backgroundColor: `${theme.colors.danger}14`,
+                      }}
+                    >
+                      <Ionicons name="trash-outline" size={18} color={theme.colors.danger} />
+                    </TouchableOpacity>
+                  </View>
+                ))
+              )}
+            </Surface>
           </ScrollView>
         </SafeAreaView>
       </Modal>
+
+      <ConfirmModal
+        visible={Boolean(estimateToDelete)}
+        title="Delete this calculation?"
+        message="This removes the saved seed and fertilizer estimate from history."
+        confirmLabel="Delete"
+        destructive
+        loading={deleteEstimateMutation.isPending}
+        onCancel={() => setEstimateToDelete(null)}
+        onConfirm={() => {
+          if (estimateToDelete) deleteEstimateMutation.mutate(estimateToDelete);
+        }}
+      />
     </Screen>
   );
 }

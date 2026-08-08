@@ -21,6 +21,7 @@ import { ConfirmModal } from '@/components/ConfirmModal';
 import { useToast } from '@/components/Toast';
 import { Button, Chip, InputField, Surface, Text } from '@/design-system/components';
 
+import { ApiError } from '@/services/apiClient';
 import { farmApi } from '@/services/farmApi';
 import {
   farmScanApi,
@@ -168,6 +169,7 @@ export default function FarmScanScreen() {
   const [scanId, setScanId] = useState<string | null>(null);
   const [scanStatus, setScanStatus] = useState<ScanVerificationStatus | null>(null);
   const [feedbackReason, setFeedbackReason] = useState('');
+  const [feedbackSubmitted, setFeedbackSubmitted] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
   const [scanToDelete, setScanToDelete] = useState<ScanHistoryItem | null>(null);
   const [selectedFieldId, setSelectedFieldId] = useState<string | undefined>(params.fieldId);
@@ -207,6 +209,7 @@ export default function FarmScanScreen() {
         setScanId(scan.id);
         setScanStatus(scan.verificationStatus ?? scan.status ?? 'completed');
         setResult(isSuccessfulScanResult(scan.analysis) ? scan.analysis : null);
+        setFeedbackSubmitted(Boolean(scan.feedback));
         setImageUri(scan.imagePath ?? null);
         setImageBase64(null);
         if (scan.farmFieldId) setSelectedFieldId(scan.farmFieldId);
@@ -236,7 +239,11 @@ export default function FarmScanScreen() {
       queryClient.invalidateQueries({ queryKey: ['scanHistory'] });
     },
     onError: (error: Error) => {
-      toast.error('Scan failed', error.message || 'Could not analyze the image. Please try again.');
+      const isLimit = error instanceof ApiError && error.statusCode === 429;
+      toast.error(
+        isLimit ? 'Daily limit reached' : 'Scan failed',
+        error.message || 'Could not analyze the image. Please try again.',
+      );
     },
   });
 
@@ -260,6 +267,7 @@ export default function FarmScanScreen() {
     } else if (nextStatus === 'failed' || nextStatus === 'rejected') {
       setResult(null);
     }
+    if (scan.feedback) setFeedbackSubmitted(true);
   }, [statusQuery.data?.scan]);
 
   const feedbackMutation = useMutation({
@@ -271,6 +279,7 @@ export default function FarmScanScreen() {
     onSuccess: () => {
       toast.success('Thank you', 'Your feedback will help verify crop scan results.');
       setFeedbackReason('');
+      setFeedbackSubmitted(true);
       queryClient.invalidateQueries({ queryKey: ['scanHistory'] });
     },
     onError: () => toast.error('Could not send feedback', 'Please try again.'),
@@ -319,6 +328,7 @@ export default function FarmScanScreen() {
         setImageBase64(asset.base64 ? `data:image/jpeg;base64,${asset.base64}` : null);
         setResult(null);
         setScanId(null);
+        setFeedbackSubmitted(false);
       }
     },
     [toast],
@@ -343,6 +353,7 @@ export default function FarmScanScreen() {
     setScanId(null);
     setScanStatus(null);
     setFeedbackReason('');
+    setFeedbackSubmitted(false);
   };
 
   const askAdvisorAboutScan = () => {
@@ -546,7 +557,7 @@ export default function FarmScanScreen() {
               )}
             </ResultCard>
 
-            {result.disease ? (
+            {result.disease && result.condition !== 'unknown' ? (
               <>
                 <SectionTitle variant="headline">
                   <Ionicons name="bug-outline" size={18} color={theme.colors.danger} /> {t('diseaseDetected')}
@@ -585,46 +596,50 @@ export default function FarmScanScreen() {
               </>
             ) : null}
 
-            <SectionTitle variant="headline">
-              <Ionicons name="bulb-outline" size={18} color={theme.colors.accent} /> {t('whatToDo')}
-            </SectionTitle>
+            {result.disease && result.condition !== 'unknown' && result.condition !== 'healthy' && result.condition !== 'good' ? (
+              <>
+                <SectionTitle variant="headline">
+                  <Ionicons name="bulb-outline" size={18} color={theme.colors.accent} /> {t('whatToDo')}
+                </SectionTitle>
 
-            {(result.recommendations?.immediate ?? []).map((r, i) => (
-              <View key={i} style={{ flexDirection: 'row', gap: 8, marginBottom: 8 }}>
-                <View
-                  style={{
-                    width: 22,
-                    height: 22,
-                    borderRadius: 11,
-                    backgroundColor: `${theme.colors.accent}20`,
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                  }}
-                >
-                  <Text variant="caption" style={{ fontWeight: '700', color: theme.colors.accent, fontSize: 11 }}>
-                    {i + 1}
-                  </Text>
-                </View>
-                <Text variant="body" style={{ flex: 1 }}>
-                  {r}
-                </Text>
-              </View>
-            ))}
+                {(result.recommendations?.immediate ?? []).map((r, i) => (
+                  <View key={i} style={{ flexDirection: 'row', gap: 8, marginBottom: 8 }}>
+                    <View
+                      style={{
+                        width: 22,
+                        height: 22,
+                        borderRadius: 11,
+                        backgroundColor: `${theme.colors.accent}20`,
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                      }}
+                    >
+                      <Text variant="caption" style={{ fontWeight: '700', color: theme.colors.accent, fontSize: 11 }}>
+                        {i + 1}
+                      </Text>
+                    </View>
+                    <Text variant="body" style={{ flex: 1 }}>
+                      {r}
+                    </Text>
+                  </View>
+                ))}
 
-            {(result.recommendations?.products ?? []).map((p, i) => (
-              <ProductCard key={i} rounded="lg">
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                  <Ionicons name="flask-outline" size={16} color={theme.colors.success} />
-                  <Text variant="headline" style={{ flex: 1 }}>
-                    {p.name}
-                  </Text>
-                  <Chip label={p.type} tone="success" />
-                </View>
-                <Text variant="caption" tone="muted">
-                  {p.usage}
-                </Text>
-              </ProductCard>
-            ))}
+                {(result.recommendations?.products ?? []).map((p, i) => (
+                  <ProductCard key={i} rounded="lg">
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                      <Ionicons name="flask-outline" size={16} color={theme.colors.success} />
+                      <Text variant="headline" style={{ flex: 1 }}>
+                        {p.name}
+                      </Text>
+                      <Chip label={p.type} tone="success" />
+                    </View>
+                    <Text variant="caption" tone="muted">
+                      {p.usage}
+                    </Text>
+                  </ProductCard>
+                ))}
+              </>
+            ) : null}
 
             {result.personalizedNote ? (
               <Surface
@@ -644,29 +659,31 @@ export default function FarmScanScreen() {
 
             {scanId && result ? (
               <>
-                <Surface rounded="lg" variant="muted" style={{ marginTop: 20, gap: 10 }}>
-                  <Text variant="headline">Was this scan accurate?</Text>
-                  <InputField
-                    label="Optional note"
-                    value={feedbackReason}
-                    onChangeText={setFeedbackReason}
-                    placeholder="Tell us what looked wrong"
-                  />
-                  <View style={{ flexDirection: 'row', gap: 8 }}>
-                    <Button
-                      label="Yes"
-                      variant="secondary"
-                      onPress={() => feedbackMutation.mutate(true)}
-                      style={{ flex: 1 }}
+                {!feedbackSubmitted && result.condition !== 'unknown' ? (
+                  <Surface rounded="lg" variant="muted" style={{ marginTop: 20, gap: 10 }}>
+                    <Text variant="headline">Was this scan accurate?</Text>
+                    <InputField
+                      label="Optional note"
+                      value={feedbackReason}
+                      onChangeText={setFeedbackReason}
+                      placeholder="Tell us what looked wrong"
                     />
-                    <Button
-                      label="Needs review"
-                      variant="secondary"
-                      onPress={() => feedbackMutation.mutate(false)}
-                      style={{ flex: 1 }}
-                    />
-                  </View>
-                </Surface>
+                    <View style={{ flexDirection: 'row', gap: 8 }}>
+                      <Button
+                        label="Yes"
+                        variant="secondary"
+                        onPress={() => feedbackMutation.mutate(true)}
+                        style={{ flex: 1 }}
+                      />
+                      <Button
+                        label="Needs review"
+                        variant="secondary"
+                        onPress={() => feedbackMutation.mutate(false)}
+                        style={{ flex: 1 }}
+                      />
+                    </View>
+                  </Surface>
+                ) : null}
                 <Button
                   label="Enquire more details"
                   icon={<Ionicons name="chatbubble-ellipses" size={18} color="#fff" />}

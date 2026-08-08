@@ -25,9 +25,27 @@ import { FormattedMessage } from '@/components/FormattedMessage';
 import { useToast } from '@/components/Toast';
 import { Chip, Surface, Text } from '@/design-system/components';
 
+import { ApiError } from '@/services/apiClient';
 import { advisorApi } from '@/services/advisorApi';
 import { farmScanApi, type ScanDetail } from '@/services/farmScanApi';
 import { weatherApi } from '@/services/weatherApi';
+
+function normalizeAudioDataUrl(dataUrl: string, uri: string): string {
+  const lower = uri.toLowerCase();
+  const mime = lower.endsWith('.webm')
+    ? 'audio/webm'
+    : lower.endsWith('.wav')
+      ? 'audio/wav'
+      : lower.endsWith('.3gp') || lower.endsWith('.3gpp')
+        ? 'audio/3gpp'
+        : lower.endsWith('.mp3')
+          ? 'audio/mpeg'
+          : 'audio/mp4';
+  if (!dataUrl.startsWith('data:')) {
+    return `data:${mime};base64,${dataUrl}`;
+  }
+  return dataUrl.replace(/^data:[^;,]*/, `data:${mime}`);
+}
 import { useAppStore } from '@/store/useAppStore';
 import { useTranslation } from '@/i18n/useTranslation';
 
@@ -213,26 +231,9 @@ export default function ModernAdvisorScreen() {
   const profile = useAppStore((state) => state.farmerProfile);
   const aiAdvisorPreference = useAppStore((state) => state.aiAdvisorPreference);
   const personalDataRevision = useAppStore((state) => state.personalDataRevision);
-  // Prefer AAC/M4A so Groq Whisper accepts phone recordings (avoid CAF/PCM).
-  const audioRecorder = useAudioRecorder({
-    ...RecordingPresets.HIGH_QUALITY,
-    extension: '.m4a',
-    numberOfChannels: 1,
-    bitRate: 128000,
-    sampleRate: 44100,
-    android: {
-      ...RecordingPresets.HIGH_QUALITY.android,
-      extension: '.m4a',
-      outputFormat: 'mpeg4',
-      audioEncoder: 'aac',
-    },
-    ios: {
-      ...RecordingPresets.HIGH_QUALITY.ios,
-      extension: '.m4a',
-      outputFormat: 'aac',
-      audioQuality: 127,
-    },
-  } as typeof RecordingPresets.HIGH_QUALITY);
+  // Use the stock HIGH_QUALITY preset (m4a/AAC). Custom iOS format overrides were
+  // producing unreadable recordings and Groq rejected them.
+  const audioRecorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
   const recorderState = useAudioRecorderState(audioRecorder);
   const listRef = useRef<any>(null);
   const handledScanIdRef = useRef<string | null>(null);
@@ -367,6 +368,7 @@ export default function ModernAdvisorScreen() {
           return;
         }
       }
+      await setAudioModeAsync({ playsInSilentMode: true, allowsRecording: true });
       await audioRecorder.prepareToRecordAsync();
       audioRecorder.record();
       isRecordingRef.current = true;
@@ -390,7 +392,10 @@ export default function ModernAdvisorScreen() {
     setIsTranscribing(true);
 
     try {
+      // Give the recorder a brief moment so very short taps still flush audio.
+      await new Promise((resolve) => setTimeout(resolve, 250));
       await audioRecorder.stop();
+      await setAudioModeAsync({ playsInSilentMode: true, allowsRecording: false });
       const uri = audioRecorder.uri;
       if (!uri) {
         setIsTranscribing(false);
@@ -401,6 +406,13 @@ export default function ModernAdvisorScreen() {
 
       const response = await fetch(uri);
       const blob = await response.blob();
+      if (!blob || blob.size < 256) {
+        setIsTranscribing(false);
+        voiceBusyRef.current = false;
+        toast.error('Recording too short', 'Hold the mic a second longer, then stop.');
+        return;
+      }
+
       const reader = new FileReader();
 
       reader.onerror = () => {
@@ -410,13 +422,14 @@ export default function ModernAdvisorScreen() {
       };
 
       reader.onloadend = async () => {
-        const base64 = reader.result as string;
-        if (!base64 || typeof base64 !== 'string' || !base64.includes('base64,')) {
+        const raw = reader.result as string;
+        if (!raw || typeof raw !== 'string') {
           setIsTranscribing(false);
           voiceBusyRef.current = false;
           toast.error('Recording failed', 'Could not encode the audio. Please try again.');
           return;
         }
+        const base64 = normalizeAudioDataUrl(raw, uri);
         try {
           const result = await advisorApi.transcribeVoice(base64, accessToken ?? '', requestPreferences);
           if (result.success && result.text) {
@@ -424,8 +437,10 @@ export default function ModernAdvisorScreen() {
           } else {
             toast.error('Transcription failed', result.error || 'Could not transcribe audio.');
           }
-        } catch {
-          toast.error('Error', 'Voice transcription failed. Please type your message.');
+        } catch (err) {
+          const message =
+            err instanceof ApiError ? err.message : 'Voice transcription failed. Please type your message.';
+          toast.error('Transcription failed', message);
         } finally {
           setIsTranscribing(false);
           voiceBusyRef.current = false;
@@ -475,13 +490,20 @@ export default function ModernAdvisorScreen() {
           },
         ]);
       })
-      .catch(() => {
+      .catch((err: unknown) => {
+        const limitHit = err instanceof ApiError && err.statusCode === 429;
+        const fallback = limitHit
+          ? err.message || 'Daily chat limit reached. Come back tomorrow to ask again.'
+          : 'I could not reach the advisor service. Please check your connection and try again.';
+        if (limitHit) {
+          toast.error('Daily limit reached', fallback);
+        }
         setMessages((prev) => [
           ...prev,
           {
             id: `agent-${Date.now()}`,
             fromAgent: true,
-            text: 'I could not reach the advisor service. Please check your connection and try again.',
+            text: fallback,
             timestamp: new Date(),
           },
         ]);

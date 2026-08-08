@@ -1,5 +1,24 @@
 import { apiRequest } from '@/services/apiClient';
 
+type InputEstimateResultLike = {
+  crop: string;
+  areaM2: number;
+  areaSource: string;
+  spacingMode: string;
+  rowCm: number;
+  intraCm: number;
+  rowSteps: number;
+  intraSteps: number;
+  population: number;
+  seedUnit: string;
+  seedKg: number | null;
+  seedStands: number | null;
+  fertilizers: { name: string; kg: number; bags50kg: number; kgPerHa?: number }[];
+  disclaimer: string;
+  aiSummary: string;
+  historyId?: string;
+};
+
 type MapCoordinate = {
   latitude: number;
   longitude: number;
@@ -153,12 +172,40 @@ export const farmApi = {
         fertilizers: { name: string; kg: number; bags50kg: number; kgPerHa: number }[];
         disclaimer: string;
         aiSummary: string;
+        historyId?: string;
       };
     }>(`/farm/fields/${fieldId}/input-estimate`, {
       method: 'POST',
       token,
       body: payload ?? {},
       timeoutMs: 45000,
+    });
+  },
+
+  inputEstimateHistory(token: string, fieldId: string) {
+    return apiRequest<{
+      history: {
+        id: string;
+        fieldId: string;
+        crop: string | null;
+        areaM2: number | null;
+        rowCm: number | null;
+        intraCm: number | null;
+        population: number | null;
+        aiSummary: string | null;
+        estimate: InputEstimateResultLike;
+        date: string | null;
+      }[];
+    }>(`/farm/fields/${fieldId}/input-estimates`, {
+      method: 'GET',
+      token,
+    });
+  },
+
+  deleteInputEstimate(token: string, historyId: string) {
+    return apiRequest<{ message: string }>(`/farm/input-estimates/${historyId}`, {
+      method: 'DELETE',
+      token,
     });
   },
 

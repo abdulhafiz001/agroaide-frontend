@@ -10,6 +10,7 @@ import * as Location from 'expo-location';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
 import { ConfirmModal } from '@/components/ConfirmModal';
+import { CropTagsInput } from '@/components/CropTagsInput';
 import { useToast } from '@/components/Toast';
 import { Button, Chip, InputField, Surface, Text } from '@/design-system/components';
 import { authApi } from '@/services/authApi';
@@ -141,7 +142,7 @@ export default function ProfileScreen() {
   const [editFarmName, setEditFarmName] = useState('');
   const [editFarmLocation, setEditFarmLocation] = useState('');
   const [editFarmSize, setEditFarmSize] = useState('');
-  const [editCrops, setEditCrops] = useState('');
+  const [editCrops, setEditCrops] = useState<string[]>([]);
   const [editSoilType, setEditSoilType] = useState('');
 
   const [showPasswordSection, setShowPasswordSection] = useState(false);
@@ -186,7 +187,7 @@ export default function ProfileScreen() {
       setEditFarmName(profile.farmName || '');
       setEditFarmLocation(profile.farmLocation || '');
       setEditFarmSize(String(profile.farmSizeM2 || ''));
-      setEditCrops(profile.crops?.join(', ') || '');
+      setEditCrops(profile.crops?.length ? [...profile.crops] : []);
       setEditSoilType(profile.soilType || '');
     }
   }, [profile]);
@@ -203,7 +204,6 @@ export default function ProfileScreen() {
 
   const updateProfileMutation = useMutation({
     mutationFn: () => {
-      const crops = editCrops ? editCrops.split(',').map((c) => c.trim()).filter(Boolean) : undefined;
       const payload: any = {
         fullName: editName,
         email: editEmail,
@@ -211,7 +211,7 @@ export default function ProfileScreen() {
         farmName: editFarmName || null,
         farmLocation: editFarmLocation || null,
         farmSizeM2: parseFloat(editFarmSize) || 0,
-        crops,
+        crops: editCrops.length ? editCrops : undefined,
         soilType: editSoilType || null,
       };
       if (editFarmLatitude != null) payload.farmLatitude = editFarmLatitude;
@@ -347,10 +347,14 @@ export default function ProfileScreen() {
     try {
       const res = await authApi.updateProfile(accessToken, { preferredLanguage: langCode });
       setProfile(res.profile);
+      // Drop cached AI insights so the next load uses the new language.
+      queryClient.invalidateQueries({ queryKey: ['dashboardAiInsights'] });
+      queryClient.invalidateQueries({ queryKey: ['advisorSuggestions'] });
+      queryClient.invalidateQueries({ queryKey: ['advisorHistory'] });
     } catch {
       toast.error('Error', 'Could not update language preference.');
     }
-  }, [accessToken, setProfile, toast]);
+  }, [accessToken, queryClient, setProfile, toast]);
 
   const handleGPSLocation = useCallback(async () => {
     try {
@@ -458,7 +462,7 @@ export default function ProfileScreen() {
                   ≈ {formatSquareSidesFt(Number(editFarmSize))} (square plot estimate)
                 </Text>
               ) : null}
-              <InputField label="Crops (comma separated)" value={editCrops} onChangeText={setEditCrops} placeholder="Maize, Rice, Cassava" />
+              <CropTagsInput value={editCrops} onChange={setEditCrops} placeholder="e.g. Maize," />
               <InputField label="Soil type" value={editSoilType} onChangeText={setEditSoilType} />
               <Button
                 label="Save changes"

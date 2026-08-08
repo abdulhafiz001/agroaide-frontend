@@ -19,6 +19,7 @@ import type { LeafletMapHandle } from '@/components/LeafletMap';
 import styled, { useTheme } from '@/design-system/styled';
 
 
+import { CropTagsInput } from '@/components/CropTagsInput';
 import { useToast } from '@/components/Toast';
 import { Button, Chip, InputField, Surface, Text } from '@/design-system/components';
 import { ApiError } from '@/services/apiClient';
@@ -112,7 +113,7 @@ type RegistrationForm = {
   farmSizeM2: string;
   soilType: string;
   irrigationAccess: string;
-  crops: string;
+  crops: string[];
   experienceLevel: ExperienceLevel;
   acceptedTerms: boolean;
   acceptedPrivacy: boolean;
@@ -132,7 +133,7 @@ const initialForm: RegistrationForm = {
   farmSizeM2: '',
   soilType: '',
   irrigationAccess: 'drip',
-  crops: '',
+  crops: [],
   experienceLevel: 'beginner',
   acceptedTerms: false,
   acceptedPrivacy: false,
@@ -273,9 +274,7 @@ export default function RegisterScreen() {
         ? (form.irrigationAccess as (typeof irrigationOptions)[number])
         : 'drip';
       const farmSizeParsed = form.farmSizeM2 ? Number(form.farmSizeM2) : undefined;
-      const crops = form.crops
-        ? form.crops.split(',').map((c) => c.trim()).filter(Boolean)
-        : undefined;
+      const crops = form.crops.length ? form.crops : undefined;
 
       return authApi.register({
         fullName: form.fullName.trim(),
@@ -462,11 +461,10 @@ export default function RegisterScreen() {
           />
         ))}
       </View>
-      <InputField
-        label="Primary crops"
+      <CropTagsInput
         value={form.crops}
-        onChangeText={(t) => updateForm('crops', t)}
-        placeholder="Maize, Rice, Cassava"
+        onChange={(crops) => updateForm('crops', crops)}
+        placeholder="e.g. Maize,"
       />
       <Text variant="caption" tone="muted">
         Experience level

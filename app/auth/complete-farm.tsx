@@ -17,6 +17,7 @@ import styled, { useTheme } from '@/design-system/styled';
 
 import { LocationMapPreview } from '@/components/LocationMapPreview';
 import type { LeafletMapHandle } from '@/components/LeafletMap';
+import { CropTagsInput } from '@/components/CropTagsInput';
 import { useToast } from '@/components/Toast';
 import { Button, Chip, InputField, Surface, Text } from '@/design-system/components';
 import { ApiError } from '@/services/apiClient';
@@ -104,7 +105,7 @@ export default function CompleteFarmScreen() {
   const [irrigationAccess, setIrrigationAccess] = useState<(typeof irrigationOptions)[number]>(
     profile?.irrigationAccess ?? 'drip',
   );
-  const [crops, setCrops] = useState(profile?.crops?.length ? profile.crops.join(', ') : '');
+  const [crops, setCrops] = useState<string[]>(profile?.crops?.length ? [...profile.crops] : []);
   const [experienceLevel, setExperienceLevel] = useState<ExperienceLevel>(profile?.experienceLevel ?? 'beginner');
   const [farmLocation, setFarmLocation] = useState(
     profile?.farmLocation && profile.farmLocation !== 'Unknown location' ? profile.farmLocation : '',
@@ -201,15 +202,11 @@ export default function CompleteFarmScreen() {
     }
   }, [toast]);
 
-  const canContinue = useMemo(() => Boolean(farmName.trim() || crops.trim()), [crops, farmName]);
+  const canContinue = useMemo(() => Boolean(farmName.trim() || crops.length), [crops, farmName]);
   const canSave = farmLatitude != null && farmLongitude != null;
 
   const mutation = useMutation({
     mutationFn: () => {
-      const cropList = crops
-        .split(',')
-        .map((c) => c.trim())
-        .filter(Boolean);
       const size = farmSizeM2 ? Number(farmSizeM2) : undefined;
 
       return authApi.updateProfile(accessToken ?? '', {
@@ -219,7 +216,7 @@ export default function CompleteFarmScreen() {
         farmLongitude,
         ...(typeof size === 'number' && !Number.isNaN(size) ? { farmSizeM2: size } : {}),
         ...(soilType ? { soilType } : {}),
-        ...(cropList.length ? { crops: cropList } : {}),
+        ...(crops.length ? { crops } : {}),
         experienceLevel,
         irrigationAccess,
       });
@@ -266,15 +263,12 @@ export default function CompleteFarmScreen() {
             {step === 1 ? (
               <Card rounded="xl">
                 <InputField label="Farm name" value={farmName} onChangeText={setFarmName} placeholder="e.g. Green Valley Farm" />
-                <InputField
-                  label="Primary crops"
+                <CropTagsInput
                   value={crops}
-                  onChangeText={setCrops}
-                  placeholder="Maize, Rice, Cassava"
+                  onChange={setCrops}
+                  placeholder="e.g. Maize,"
+                  hint="Add each crop with a comma. Disease alerts and market tips match these cards."
                 />
-                <Text variant="caption" tone="muted">
-                  List the main crops you grow (comma separated). Disease alerts and market tips are matched to these.
-                </Text>
                 <InputField
                   label="Farm size (m²)"
                   value={farmSizeM2}
