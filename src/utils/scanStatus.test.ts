@@ -12,7 +12,10 @@ describe('scan status helpers', () => {
   });
 
   it('provides friendly status and normalized feedback', () => {
-    assert.equal(getScanStatusMessage('needs_review'), 'Waiting for expert review');
+    // Kindwise / auto-verified pipeline: needs_review surfaces as complete to the farmer.
+    assert.equal(getScanStatusMessage('needs_review'), 'Analysis complete');
+    assert.equal(getScanStatusMessage('completed'), 'Analysis complete');
+    assert.equal(getScanStatusMessage('failed'), 'Analysis could not be completed');
     assert.equal(normalizeFeedbackReason('  Wrong crop   shown  '), 'Wrong crop shown');
     assert.equal(normalizeFeedbackReason('   '), undefined);
   });
