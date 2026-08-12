@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'expo-router';
-import React, { useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   KeyboardAvoidingView,
@@ -16,11 +16,14 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import styled, { useTheme } from '@/design-system/styled';
 
 import { ConfirmModal } from '@/components/ConfirmModal';
+import { OfflineBanner } from '@/components/OfflineBanner';
 import { useToast } from '@/components/Toast';
 import { Button, Chip, InputField, Surface, Text } from '@/design-system/components';
+import { useNetworkStatus } from '@/hooks/useNetworkStatus';
 
 import { useTranslation } from '@/i18n/useTranslation';
-import { farmApi, type FarmField, type JournalEntry } from '@/services/farmApi';
+import { farmApi, type FarmField, type FarmOverviewResponse, type JournalEntry } from '@/services/farmApi';
+import { loadOfflineCache, saveOfflineCache } from '@/services/offlineCache';
 import { isOfflineQueuedError, withOfflineQueue } from '@/services/offlineQueue';
 import { useAppStore } from '@/store/useAppStore';
 import { formatAreaWithFt, formatNaira } from '@/utils/formatters';
@@ -105,6 +108,9 @@ export default function FarmScreen() {
   const profile = useAppStore((s) => s.farmerProfile);
   const queryClient = useQueryClient();
   const mapRef = useRef<FarmMapViewHandle>(null);
+  const { isOffline } = useNetworkStatus();
+  const userKey = profile?.id ?? 'anon';
+  const farmCacheKey = `farmOverview:${userKey}`;
 
   const [showFieldModal, setShowFieldModal] = useState(false);
   const [showJournalModal, setShowJournalModal] = useState(false);
@@ -118,16 +124,46 @@ export default function FarmScreen() {
   const [journalNote, setJournalNote] = useState('');
   const [journalType, setJournalType] = useState('observation');
   const [deleteTarget, setDeleteTarget] = useState<{ type: 'field' | 'journal'; id: string; name: string } | null>(null);
+  const [lastPulledAt, setLastPulledAt] = useState<string | null>(null);
 
   const profileCrops = profile?.crops?.filter(Boolean) ?? [];
 
-  const { data, isLoading } = useQuery({
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const cached = await loadOfflineCache<FarmOverviewResponse>(farmCacheKey);
+      if (!cancelled && cached?.data) {
+        queryClient.setQueryData(['farmOverview'], cached.data);
+        setLastPulledAt(cached.savedAt);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [farmCacheKey, queryClient]);
+
+  const { data, isLoading, isError } = useQuery({
     queryKey: ['farmOverview'],
-    queryFn: () => farmApi.getOverview(token),
+    queryFn: async () => {
+      const overview = await farmApi.getOverview(token);
+      await saveOfflineCache(farmCacheKey, overview);
+      setLastPulledAt(new Date().toISOString());
+      return overview;
+    },
     enabled: Boolean(token),
+    retry: isOffline ? false : 1,
   });
 
   const invalidate = () => queryClient.invalidateQueries({ queryKey: ['farmOverview'] });
+
+  const patchFarmCache = (updater: (prev: FarmOverviewResponse) => FarmOverviewResponse) => {
+    queryClient.setQueryData<FarmOverviewResponse>(['farmOverview'], (prev) => {
+      if (!prev) return prev;
+      const next = updater(prev);
+      void saveOfflineCache(farmCacheKey, next);
+      return next;
+    });
+  };
 
   const addFieldMutation = useMutation({
     mutationFn: () =>
@@ -159,9 +195,27 @@ export default function FarmScreen() {
     },
     onError: (err) => {
       if (isOfflineQueuedError(err)) {
-        invalidate();
+        const tempId = `offline-field-${Date.now()}`;
+        patchFarmCache((prev) => ({
+          ...prev,
+          fields: [
+            {
+              id: tempId,
+              name: fieldName,
+              crop: fieldCrop,
+              area: parseFloat(fieldArea) || 0,
+              health: 80,
+              moisture: 50,
+              daysSincePlanting: null,
+              status: 'active',
+              plantedAt: null,
+              hasMeasuredBoundary: false,
+            },
+            ...prev.fields,
+          ],
+        }));
         closeFieldModal();
-        toast.info('Saved offline', 'Field will sync when you reconnect. Walk boundary after sync.');
+        toast.info('Added offline', 'Field saved on this device and will sync when you come back online.');
         return;
       }
       toast.error(t('errorGeneric'), t('couldNotAddField'));
@@ -191,10 +245,17 @@ export default function FarmScreen() {
       closeFieldModal();
     },
     onError: (err) => {
-      if (isOfflineQueuedError(err)) {
-        invalidate();
+      if (isOfflineQueuedError(err) && editingField) {
+        patchFarmCache((prev) => ({
+          ...prev,
+          fields: prev.fields.map((f) =>
+            f.id === editingField.id
+              ? { ...f, name: fieldName, crop: fieldCrop, area: parseFloat(fieldArea) || 0 }
+              : f,
+          ),
+        }));
         closeFieldModal();
-        toast.info('Saved offline', 'Field update will sync when you reconnect.');
+        toast.info('Updated offline', 'Field changes will sync when you come back online.');
         return;
       }
       toast.error('Error', 'Could not update field.');
@@ -214,10 +275,13 @@ export default function FarmScreen() {
       toast.success('Deleted', 'Farm field removed.');
     },
     onError: (err) => {
-      if (isOfflineQueuedError(err)) {
-        invalidate();
+      if (isOfflineQueuedError(err) && deleteTarget) {
+        patchFarmCache((prev) => ({
+          ...prev,
+          fields: prev.fields.filter((f) => f.id !== deleteTarget.id),
+        }));
         setDeleteTarget(null);
-        toast.info('Queued offline', 'Field delete will sync when you reconnect.');
+        toast.info('Queued offline', 'Field delete will sync when you come back online.');
         return;
       }
       toast.error('Error', 'Could not delete field.');
@@ -238,9 +302,21 @@ export default function FarmScreen() {
     },
     onError: (err) => {
       if (isOfflineQueuedError(err)) {
-        invalidate();
+        const tempId = `offline-journal-${Date.now()}`;
+        patchFarmCache((prev) => ({
+          ...prev,
+          journal: [
+            {
+              id: tempId,
+              date: new Date().toISOString(),
+              note: journalNote,
+              type: journalType,
+            },
+            ...prev.journal,
+          ],
+        }));
         closeJournalModal();
-        toast.info('Saved offline', 'Journal entry will sync when you reconnect.');
+        toast.info('Added offline', 'Journal entry saved on this device and will sync when you come back online.');
         return;
       }
       toast.error('Error', 'Could not add journal entry.');
@@ -256,10 +332,15 @@ export default function FarmScreen() {
       }),
     onSuccess: () => { invalidate(); closeJournalModal(); },
     onError: (error) => {
-      if (isOfflineQueuedError(error)) {
-        invalidate();
+      if (isOfflineQueuedError(error) && editingEntry) {
+        patchFarmCache((prev) => ({
+          ...prev,
+          journal: prev.journal.map((j) =>
+            j.id === editingEntry.id ? { ...j, note: journalNote, type: journalType } : j,
+          ),
+        }));
         closeJournalModal();
-        toast.info('Saved offline', 'Journal update will sync when you reconnect.');
+        toast.info('Updated offline', 'Journal update will sync when you come back online.');
         return;
       }
       toast.error('Error', 'Could not update entry.');
@@ -327,12 +408,28 @@ export default function FarmScreen() {
     setDeleteTarget({ type, id, name });
   };
 
-  if (isLoading) {
+  if (isLoading && !data) {
     return (
       <Screen>
         <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
           <ActivityIndicator size="large" color={theme.colors.primary} />
           <Text tone="muted" style={{ marginTop: 12 }}>{t('loadingFarmData')}</Text>
+        </View>
+      </Screen>
+    );
+  }
+
+  if (isError && !data) {
+    return (
+      <Screen>
+        <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', gap: 12, padding: 24 }}>
+          <Text variant="headline">Could not load farm</Text>
+          <Text tone="muted" align="center">
+            {isOffline
+              ? 'You are offline and no saved farm data is available yet. Connect once to load your fields.'
+              : 'Unable to reach AgroAide right now. Please try again shortly.'}
+          </Text>
+          <Button label={t('retry')} onPress={() => invalidate()} fullWidth />
         </View>
       </Screen>
     );
@@ -346,6 +443,7 @@ export default function FarmScreen() {
   return (
     <Screen>
       <Container>
+        <OfflineBanner visible={isOffline || (isError && Boolean(data))} lastPulledAt={lastPulledAt} label="farm information" />
         <View style={{ paddingTop: 16, gap: 4 }}>
           <TouchableOpacity
             activeOpacity={0.7}

@@ -22,6 +22,8 @@ export function routeForNotification(
     'crop_watch_invalid',
     'planting_window',
     'planting_reminder',
+    'harvest_estimate',
+    'harvest_reminder',
   ]);
 
   if (type && detailTypes.has(type)) {
@@ -38,6 +40,10 @@ export function routeForNotification(
         ...(data?.plantOn ? { bestPlantDate: String(data.plantOn) } : {}),
         ...(data?.canSetReminder != null ? { canSetReminder: String(data.canSetReminder) } : {}),
         ...(data?.watchId ? { watchId: String(data.watchId) } : {}),
+        ...(data?.fieldId ? { fieldId: String(data.fieldId) } : {}),
+        ...(data?.harvestStart ? { harvestStart: String(data.harvestStart) } : {}),
+        ...(data?.harvestEnd ? { harvestEnd: String(data.harvestEnd) } : {}),
+        ...(data?.plantedAt ? { plantedAt: String(data.plantedAt) } : {}),
       },
     };
   }
@@ -56,7 +62,10 @@ export function routeForNotification(
         },
       };
     case 'task_reminder':
-      return { pathname: '/(app)/(tabs)/calendar' };
+      return {
+        pathname: '/(app)/(tabs)/calendar',
+        params: data?.scheduledDate ? { focusDate: String(data.scheduledDate) } : undefined,
+      };
     case 'scan_result':
       return {
         pathname: '/(app)/farm-scan',

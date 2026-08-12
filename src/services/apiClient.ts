@@ -16,6 +16,16 @@ export class ApiError extends Error {
   }
 }
 
+async function isDeviceOffline(): Promise<boolean> {
+  try {
+    const NetInfo = (await import('@react-native-community/netinfo')).default;
+    const state = await NetInfo.fetch();
+    return !(state.isConnected && state.isInternetReachable !== false);
+  } catch {
+    return false;
+  }
+}
+
 type RequestOptions = {
   method?: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
   body?: unknown;
@@ -50,16 +60,18 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
     const host = new URL(API_BASE_URL).hostname;
     const isTimeout = err instanceof Error && err.name === 'AbortError';
     const isLocalHost = ['127.0.0.1', 'localhost'].includes(host);
+    const offline = await isDeviceOffline();
 
     let hint: string;
-    if (isTimeout) {
-      hint = 'Request timed out. The dashboard loads weather and AI data—it can take 20–30 seconds on first load. Try again.';
+    if (offline) {
+      hint = 'You are not connected to the internet. Check your mobile data or Wi‑Fi and try again.';
+    } else if (isTimeout) {
+      hint = 'The request timed out. Please try again in a moment.';
     } else if (isLocalHost) {
-      hint = 'Cannot reach backend. On a physical device, set EXPO_PUBLIC_API_URL to your computer LAN IP (e.g. http://192.168.x.x:8000/api). For Android emulator use http://10.0.2.2:8000/api.';
-    } else {
       hint =
-        'Cannot reach backend API. Check: (1) Backend is running: php artisan serve --host=0.0.0.0 --port=8000. ' +
-        '(2) Windows Firewall allows port 8000—run allow-firewall.bat as Administrator. (3) Device and computer are on the same WiFi.';
+        'Cannot reach the local backend. On a physical device, set EXPO_PUBLIC_API_URL to your computer LAN IP. For Android emulator use http://10.0.2.2:8000/api.';
+    } else {
+      hint = 'Cannot reach AgroAide right now. Please try again shortly.';
     }
     throw new ApiError(hint, 0);
   }

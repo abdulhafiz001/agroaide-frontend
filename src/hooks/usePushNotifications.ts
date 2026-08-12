@@ -6,6 +6,7 @@ import Constants from 'expo-constants';
 import { useRouter } from 'expo-router';
 
 import { authApi } from '@/services/authApi';
+import { queryClient } from '@/utils/queryClient';
 import { useAppStore } from '@/store/useAppStore';
 import { routeForNotification } from '@/utils/notificationRouting';
 
@@ -92,10 +93,17 @@ export function usePushNotifications() {
           ...(pushToken ? { pushToken } : {}),
           notificationPreferences,
         });
-      } catch {
-        // Non-critical
+        if (pushToken) {
+          console.info('[push] device token registered with backend');
+        } else {
+          console.warn('[push] no device token (permission denied or not a physical device build)');
+        }
+      } catch (e) {
+        console.warn('[push] failed to upload token', e);
       }
     });
+
+    let receivedSub: { remove: () => void } | null = null;
 
     try {
       // Cold start: app opened from a killed state by tapping a notification
@@ -106,14 +114,29 @@ export function usePushNotifications() {
         });
       }
 
+      // When a push arrives (foreground), refresh the in-app inbox immediately.
+      receivedSub = Notifications.addNotificationReceivedListener(() => {
+        queryClient.invalidateQueries({ queryKey: ['notifications'] });
+        queryClient.invalidateQueries({ queryKey: ['dashboardSnapshot'] });
+      });
+
       responseListener.current = Notifications.addNotificationResponseReceivedListener((response: any) => {
+        queryClient.invalidateQueries({ queryKey: ['notifications'] });
         openFromNotification(router, response);
       });
     } catch {
       // Not available in Expo Go
     }
 
+    // Keep inbox warm even if the user never opens the Notifications page.
+    const pollId = setInterval(() => {
+      queryClient.invalidateQueries({ queryKey: ['notifications'] });
+    }, 90_000);
+    queryClient.invalidateQueries({ queryKey: ['notifications'] });
+
     return () => {
+      clearInterval(pollId);
+      receivedSub?.remove();
       if (responseListener.current) {
         responseListener.current.remove();
       }

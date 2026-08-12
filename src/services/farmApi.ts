@@ -34,6 +34,8 @@ export type FarmField = {
   daysSincePlanting: number | null;
   status: string;
   plantedAt: string | null;
+  harvestStartDate?: string | null;
+  harvestEndDate?: string | null;
   boundaryGeojson?: GeoJSON.Polygon | null;
   hasMeasuredBoundary?: boolean;
   totalExpense?: number;
@@ -133,6 +135,33 @@ export const farmApi = {
       method: 'PUT',
       token,
       body: payload,
+    });
+  },
+
+  getPlantingPrompt(token: string) {
+    return apiRequest<{
+      shouldPrompt: boolean;
+      fields: { id: string; name: string; crop: string }[];
+      promptedOn: string | null;
+    }>('/farm/planting-prompt', { token });
+  },
+
+  dismissPlantingPrompt(token: string) {
+    return apiRequest<{ ok: boolean; promptedOn: string }>('/farm/planting-prompt/dismiss', {
+      method: 'POST',
+      token,
+      body: {},
+    });
+  },
+
+  recordPlantedAt(token: string, fieldId: string, plantedAt: string) {
+    return apiRequest<{
+      message: string;
+      field: Pick<FarmField, 'id' | 'name' | 'crop' | 'plantedAt' | 'harvestStartDate' | 'harvestEndDate' | 'daysSincePlanting'>;
+    }>(`/farm/fields/${fieldId}/planted-at`, {
+      method: 'POST',
+      token,
+      body: { plantedAt },
     });
   },
 

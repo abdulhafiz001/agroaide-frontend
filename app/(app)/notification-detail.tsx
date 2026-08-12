@@ -39,11 +39,18 @@ export default function NotificationDetailScreen() {
     bestPlantDate?: string;
     canSetReminder?: string;
     watchId?: string;
+    fieldId?: string;
+    harvestStart?: string;
+    harvestEnd?: string;
+    plantedAt?: string;
   }>();
 
   const canSetReminder = params.canSetReminder === 'true' || params.canSetReminder === '1';
   const bestPlantDate = params.bestPlantDate;
   const analysis = params.analysis;
+  const harvestStart = params.harvestStart;
+  const harvestEnd = params.harvestEnd;
+  const isHarvest = params.type === 'harvest_estimate' || params.type === 'harvest_reminder' || analysis === 'harvest_ready';
 
   const reminderMutation = useMutation({
     mutationFn: async () => {
@@ -84,6 +91,17 @@ export default function NotificationDetailScreen() {
               Suggested planting date: {bestPlantDate}
             </Text>
           ) : null}
+          {params.plantedAt ? (
+            <Text variant="caption" tone="muted">
+              Planting date you entered: {String(params.plantedAt)}
+            </Text>
+          ) : null}
+          {harvestStart ? (
+            <Text variant="caption" tone="muted">
+              Estimated harvest window: {String(harvestStart)}
+              {harvestEnd ? ` to ${String(harvestEnd)}` : ''}
+            </Text>
+          ) : null}
           {analysis === 'season_passed' ? (
             <Text variant="caption" tone="muted">
               This crop stays on your watch list for next year, but you cannot plant it again this season.
@@ -92,6 +110,11 @@ export default function NotificationDetailScreen() {
           {analysis === 'invalid' ? (
             <Text variant="caption" tone="muted">
               We removed this entry from your crop watches because it did not look like a valid crop.
+            </Text>
+          ) : null}
+          {isHarvest ? (
+            <Text variant="caption" tone="muted">
+              Based on the planting date you entered, this is advice from your personalized AI advisor. Open the field to edit the start date, or open the calendar to see the estimated harvest days.
             </Text>
           ) : null}
         </Surface>
@@ -105,17 +128,42 @@ export default function NotificationDetailScreen() {
           />
         ) : null}
 
+        {params.fieldId ? (
+          <Button
+            label="Open field"
+            variant="secondary"
+            onPress={() =>
+              router.push({
+                pathname: '/(app)/field-detail',
+                params: { fieldId: String(params.fieldId), fieldName: String(params.crop || 'Field') },
+              })
+            }
+            fullWidth
+          />
+        ) : null}
+
         <Button
           label="Open calendar"
           variant="secondary"
           onPress={() =>
             router.push({
               pathname: '/(app)/(tabs)/calendar',
-              params: bestPlantDate ? { focusDate: String(bestPlantDate), focusCrop: String(params.crop || '') } : {},
+              params: {
+                focusDate: String(harvestStart || bestPlantDate || ''),
+                focusCrop: String(params.crop || ''),
+              },
             })
           }
           fullWidth
         />
+
+        {isHarvest ? (
+          <Button
+            label="Ask AI advisor"
+            onPress={() => router.push('/(app)/(tabs)/advisor')}
+            fullWidth
+          />
+        ) : null}
       </ScrollView>
     </Screen>
   );

@@ -41,6 +41,7 @@ export default function RecoveryScreen() {
   const [password, setPassword] = useState('');
   const [passwordConfirmation, setPasswordConfirmation] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
   const requestMutation = useMutation({
     mutationFn: () => authApi.requestPasswordReset(identifier.trim()),
@@ -141,7 +142,16 @@ export default function RecoveryScreen() {
                 label="Confirm new password"
                 value={passwordConfirmation}
                 onChangeText={setPasswordConfirmation}
-                secureTextEntry={!showPassword}
+                secureTextEntry={!showConfirmPassword}
+                rightElement={
+                  <Pressable onPress={() => setShowConfirmPassword((v) => !v)} hitSlop={8}>
+                    <Ionicons
+                      name={showConfirmPassword ? 'eye-off-outline' : 'eye-outline'}
+                      size={20}
+                      color={theme.colors.textSecondary}
+                    />
+                  </Pressable>
+                }
               />
               <Button
                 label="Reset password"

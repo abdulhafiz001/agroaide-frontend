@@ -68,6 +68,7 @@ export default function FieldDetailScreen() {
   const [intraInput, setIntraInput] = useState('0.33');
   const [calcStep, setCalcStep] = useState(0);
   const [estimateToDelete, setEstimateToDelete] = useState<string | null>(null);
+  const [plantedAtDraft, setPlantedAtDraft] = useState('');
 
   const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ['fieldDetail', fieldId],
@@ -84,6 +85,36 @@ export default function FieldDetailScreen() {
   const field = data?.field;
   const summary = data?.farmSummary;
   const mapData = data?.map;
+
+  useEffect(() => {
+    if (!field?.plantedAt) {
+      setPlantedAtDraft('');
+      return;
+    }
+    const d = new Date(field.plantedAt);
+    if (Number.isNaN(d.getTime())) {
+      setPlantedAtDraft(String(field.plantedAt).slice(0, 10));
+      return;
+    }
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    setPlantedAtDraft(`${y}-${m}-${day}`);
+  }, [field?.plantedAt]);
+
+  const savePlantedMutation = useMutation({
+    mutationFn: () => farmApi.recordPlantedAt(token, String(fieldId), plantedAtDraft.trim()),
+    onSuccess: (res) => {
+      queryClient.invalidateQueries({ queryKey: ['fieldDetail', fieldId] });
+      queryClient.invalidateQueries({ queryKey: ['farmOverview'] });
+      queryClient.invalidateQueries({ queryKey: ['calendar'] });
+      toast.success('Planting date updated', res.message);
+    },
+    onError: (err) => {
+      const message = err instanceof ApiError ? err.message : 'Could not update planting date.';
+      toast.error('Update failed', message);
+    },
+  });
 
   const { data: cropMarket } = useQuery({
     queryKey: ['marketIntel', field?.crop],
@@ -238,6 +269,52 @@ export default function FieldDetailScreen() {
                   <Chip label={t('boundaryPending')} tone="warning" />
                 )}
               </View>
+
+              <Surface variant="muted" style={{ marginTop: 8, padding: 12, borderRadius: 12, gap: 8 }}>
+                <Text variant="caption" tone="accent">
+                  Planting & harvest
+                </Text>
+                <InputField
+                  label="Planting start date (YYYY-MM-DD)"
+                  value={plantedAtDraft}
+                  onChangeText={setPlantedAtDraft}
+                  placeholder="2026-07-01"
+                  autoCapitalize="none"
+                />
+                {field.harvestStartDate ? (
+                  <Text variant="caption" tone="muted">
+                    AI harvest window: {field.harvestStartDate}
+                    {field.harvestEndDate ? ` to ${field.harvestEndDate}` : ''}
+                  </Text>
+                ) : (
+                  <Text variant="caption" tone="muted">
+                    Save a planting date to get a harvest estimate on your calendar.
+                  </Text>
+                )}
+                <View style={{ flexDirection: 'row', gap: 8, flexWrap: 'wrap' }}>
+                  <Button
+                    label="Save planting date"
+                    onPress={() => savePlantedMutation.mutate()}
+                    loading={savePlantedMutation.isPending}
+                    disabled={!/^\d{4}-\d{2}-\d{2}$/.test(plantedAtDraft.trim())}
+                    style={{ flexGrow: 1 }}
+                  />
+                  {field.harvestStartDate ? (
+                    <Button
+                      label="See calendar"
+                      variant="secondary"
+                      onPress={() =>
+                        router.push({
+                          pathname: '/(app)/(tabs)/calendar',
+                          params: { focusDate: field.harvestStartDate!, focusCrop: field.crop },
+                        })
+                      }
+                      style={{ flexGrow: 1 }}
+                    />
+                  ) : null}
+                </View>
+              </Surface>
+
               {cropPrice ? (
                 <Surface variant="muted" style={{ marginTop: 8, padding: 12, borderRadius: 12, gap: 4 }}>
                   <Text variant="caption" tone="accent">

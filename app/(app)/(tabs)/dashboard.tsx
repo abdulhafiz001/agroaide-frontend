@@ -18,18 +18,22 @@ import {
     Wind,
 } from 'lucide-react-native';
 import { useQuery , useMutation, useQueryClient } from '@tanstack/react-query';
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, KeyboardAvoidingView, Modal, Platform, ScrollView, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import styled, { useTheme } from '@/design-system/styled';
 
 
+import { OfflineBanner } from '@/components/OfflineBanner';
+import { PlantingDateModal } from '@/components/PlantingDateModal';
 import { useToast } from '@/components/Toast';
+import { useNetworkStatus } from '@/hooks/useNetworkStatus';
 import { isOfflineQueuedError, withOfflineQueue } from '@/services/offlineQueue';
+import { loadOfflineCache, saveOfflineCache } from '@/services/offlineCache';
 import { Button, Chip, InputField, ProgressDonut, Surface, Text } from '@/design-system/components';
 
-import { dashboardApi } from '@/services/dashboardApi';
+import { dashboardApi, type DashboardSnapshotResponse } from '@/services/dashboardApi';
 import { farmApi, type FarmField } from '@/services/farmApi';
 import { marketApi, type MarketPrice } from '@/services/marketApi';
 import { ApiError } from '@/services/apiClient';
@@ -131,13 +135,32 @@ export default function Dashboard() {
   const userKey = farmerProfile?.id ?? accessToken ?? 'anon';
 
   const { t, getGreeting } = useTranslation();
+  const { isOffline } = useNetworkStatus();
   const [showAddFarmModal, setShowAddFarmModal] = useState(false);
   const [newFieldName, setNewFieldName] = useState('');
   const [newFieldCrop, setNewFieldCrop] = useState('');
   const [newFieldArea, setNewFieldArea] = useState('');
   const [walkAfterSave, setWalkAfterSave] = useState(true);
+  const [lastPulledAt, setLastPulledAt] = useState<string | null>(null);
+  const [showPlantingModal, setShowPlantingModal] = useState(false);
 
   const profileCrops = farmerProfile?.crops?.filter(Boolean) ?? [];
+  const dashCacheKey = `dashboard:${userKey}`;
+  const farmCacheKey = `farmOverview:${userKey}`;
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const cached = await loadOfflineCache<DashboardSnapshotResponse>(dashCacheKey);
+      if (!cancelled && cached?.data) {
+        queryClient.setQueryData(['dashboardSnapshot', userKey], cached.data);
+        setLastPulledAt(cached.savedAt);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [dashCacheKey, queryClient, userKey]);
 
   const {
     data: payload,
@@ -147,8 +170,14 @@ export default function Dashboard() {
     refetch,
   } = useQuery({
     queryKey: ['dashboardSnapshot', userKey],
-    queryFn: () => dashboardApi.getSnapshot(accessToken ?? ''),
+    queryFn: async () => {
+      const data = await dashboardApi.getSnapshot(accessToken ?? '');
+      await saveOfflineCache(dashCacheKey, data);
+      setLastPulledAt(new Date().toISOString());
+      return data;
+    },
     enabled: Boolean(accessToken),
+    retry: isOffline ? false : 1,
   });
 
   const profileCompleteLocally = isFarmProfileComplete(farmerProfile);
@@ -156,21 +185,65 @@ export default function Dashboard() {
 
   const { data: farmData } = useQuery({
     queryKey: ['farmOverview', userKey],
-    queryFn: () => farmApi.getOverview(accessToken ?? ''),
+    queryFn: async () => {
+      const data = await farmApi.getOverview(accessToken ?? '');
+      await saveOfflineCache(farmCacheKey, data);
+      return data;
+    },
     enabled: Boolean(accessToken) && profileReady,
+    retry: isOffline ? false : 1,
   });
 
   const { data: marketData } = useQuery({
     queryKey: ['marketIntel', userKey],
     queryFn: () => marketApi.getMarketIntel(accessToken ?? ''),
-    enabled: Boolean(accessToken) && profileReady,
+    enabled: Boolean(accessToken) && profileReady && !isOffline,
   });
 
   const { data: aiInsightsData } = useQuery({
     queryKey: ['dashboardAiInsights', userKey],
     queryFn: () => dashboardApi.getAiInsights(accessToken ?? ''),
-    enabled: Boolean(accessToken) && profileReady,
+    enabled: Boolean(accessToken) && profileReady && !isOffline,
     staleTime: 1000 * 60 * 60,
+  });
+
+  const plantingPromptQuery = useQuery({
+    queryKey: ['plantingPrompt', userKey],
+    queryFn: () => farmApi.getPlantingPrompt(accessToken ?? ''),
+    enabled: Boolean(accessToken) && profileReady && !isOffline,
+    staleTime: 1000 * 60 * 30,
+  });
+
+  useEffect(() => {
+    if (plantingPromptQuery.data?.shouldPrompt && (plantingPromptQuery.data.fields?.length ?? 0) > 0) {
+      setShowPlantingModal(true);
+    }
+  }, [plantingPromptQuery.data]);
+
+  const recordPlantedMutation = useMutation({
+    mutationFn: ({ fieldId, plantedAt }: { fieldId: string; plantedAt: string }) =>
+      farmApi.recordPlantedAt(accessToken ?? '', fieldId, plantedAt),
+    onSuccess: (res) => {
+      queryClient.invalidateQueries({ queryKey: ['farmOverview'] });
+      queryClient.invalidateQueries({ queryKey: ['plantingPrompt'] });
+      queryClient.invalidateQueries({ queryKey: ['calendar'] });
+      toast.success('Planting date saved', res.message);
+      const remaining = (plantingPromptQuery.data?.fields ?? []).filter((f) => f.id !== res.field.id);
+      if (remaining.length === 0) setShowPlantingModal(false);
+    },
+    onError: (err) => {
+      const message = err instanceof ApiError ? err.message : 'Could not save planting date.';
+      toast.error('Save failed', message);
+    },
+  });
+
+  const dismissPlantingMutation = useMutation({
+    mutationFn: () => farmApi.dismissPlantingPrompt(accessToken ?? ''),
+    onSuccess: () => {
+      setShowPlantingModal(false);
+      queryClient.invalidateQueries({ queryKey: ['plantingPrompt'] });
+    },
+    onError: () => setShowPlantingModal(false),
   });
 
   const addFieldMutation = useMutation({
@@ -229,8 +302,14 @@ export default function Dashboard() {
     );
   }
 
-  if (isError) {
-    const message = error instanceof ApiError ? error.message : 'Unable to load dashboard right now.';
+  const hardError = isError && !payload;
+  if (hardError) {
+    const message =
+      isOffline
+        ? 'You are offline and no saved dashboard data is available yet. Connect once to load your farm information.'
+        : error instanceof ApiError
+          ? error.message
+          : 'Unable to load dashboard right now.';
     const statusCode = error instanceof ApiError ? error.statusCode : undefined;
 
     return (
@@ -310,6 +389,7 @@ export default function Dashboard() {
   return (
     <Screen>
       <Container>
+        <OfflineBanner visible={isOffline || (isError && Boolean(payload))} lastPulledAt={lastPulledAt} label="dashboard information" />
         <Header>
           <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
             <View>
@@ -776,6 +856,14 @@ export default function Dashboard() {
           </ModalOverlay>
         </KeyboardAvoidingView>
       </Modal>
+
+      <PlantingDateModal
+        visible={showPlantingModal}
+        fields={plantingPromptQuery.data?.fields ?? []}
+        submitting={recordPlantedMutation.isPending}
+        onSubmit={(fieldId, plantedAt) => recordPlantedMutation.mutate({ fieldId, plantedAt })}
+        onDismiss={() => dismissPlantingMutation.mutate()}
+      />
     </Screen>
   );
 }

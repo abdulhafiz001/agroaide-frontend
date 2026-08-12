@@ -20,7 +20,7 @@ import { useToast } from '@/components/Toast';
 import { Button, Chip, InputField, Surface, Text } from '@/design-system/components';
 
 import { useTranslation } from '@/i18n/useTranslation';
-import { calendarApi, type CalendarTask } from '@/services/calendarApi';
+import { calendarApi, type CalendarResponse, type CalendarTask } from '@/services/calendarApi';
 import { isOfflineQueuedError, withOfflineQueue } from '@/services/offlineQueue';
 import { useAppStore } from '@/store/useAppStore';
 
@@ -150,6 +150,34 @@ export default function CalendarScreen() {
     queryClient.invalidateQueries({ queryKey: ['cropWatches'] });
   };
 
+  const appendOptimisticTask = (task: CalendarTask) => {
+    queryClient.setQueryData<CalendarResponse>(['calendar', selectedDate], (prev) => {
+      if (!prev) {
+        return {
+          tasks: [task],
+          dayPlan: [task],
+          markedDates: {
+            [task.scheduledDate]: { marked: true, dotColor: '#57b346' },
+          },
+          selectedDate,
+        };
+      }
+      return {
+        ...prev,
+        tasks: [task, ...prev.tasks],
+        dayPlan: task.scheduledDate === selectedDate ? [task, ...prev.dayPlan] : prev.dayPlan,
+        markedDates: {
+          ...prev.markedDates,
+          [task.scheduledDate]: {
+            ...(prev.markedDates[task.scheduledDate] ?? {}),
+            marked: true,
+            dotColor: prev.markedDates[task.scheduledDate]?.dotColor ?? '#57b346',
+          },
+        },
+      };
+    });
+  };
+
   const watches: WatchItem[] = watchesQuery.data?.watches ?? [];
 
   const findWatch = (crop: string) =>
@@ -192,10 +220,20 @@ export default function CalendarScreen() {
       invalidate();
       toast.success(t('taskAdded'), t('plantingTaskAdded'));
     },
-    onError: (err) => {
+    onError: (err, suggestion) => {
       if (isOfflineQueuedError(err)) {
-        invalidate();
-        toast.info('Saved offline', 'Planting task will sync when you reconnect.');
+        appendOptimisticTask({
+          id: `offline-task-${Date.now()}`,
+          title: `Start planting ${suggestion.crop}`,
+          description: `Seasonal suggestion. Planting window is open.`,
+          scheduledDate: selectedDate,
+          period: 'morning',
+          durationMinutes: 60,
+          impact: 'high',
+          completed: false,
+          completedAt: null,
+        });
+        toast.info('Added offline', 'Planting task saved on this device and will sync when you come back online.');
         return;
       }
       toast.error(t('errorGeneric'), t('couldNotCreatePlanting'));
@@ -243,9 +281,19 @@ export default function CalendarScreen() {
     },
     onError: (err) => {
       if (isOfflineQueuedError(err)) {
-        invalidate();
+        appendOptimisticTask({
+          id: `offline-task-${Date.now()}`,
+          title,
+          description: description || null,
+          scheduledDate: selectedDate,
+          period,
+          durationMinutes: parseInt(duration) || 30,
+          impact,
+          completed: false,
+          completedAt: null,
+        });
         closeModal();
-        toast.info('Saved offline', 'Task will sync when you reconnect.');
+        toast.info('Added offline', 'Task saved on this device and will sync when you come back online.');
         return;
       }
       toast.error(t('errorGeneric'), t('couldNotCreateTask'));
@@ -273,10 +321,26 @@ export default function CalendarScreen() {
       closeModal();
     },
     onError: (err) => {
-      if (isOfflineQueuedError(err)) {
-        invalidate();
+      if (isOfflineQueuedError(err) && editingTask) {
+        queryClient.setQueryData<CalendarResponse>(['calendar', selectedDate], (prev) => {
+          if (!prev) return prev;
+          const nextTask = {
+            ...editingTask,
+            title,
+            description: description || null,
+            scheduledDate: selectedDate,
+            period,
+            durationMinutes: parseInt(duration) || 30,
+            impact,
+          };
+          return {
+            ...prev,
+            tasks: prev.tasks.map((t) => (t.id === editingTask.id ? nextTask : t)),
+            dayPlan: prev.dayPlan.map((t) => (t.id === editingTask.id ? nextTask : t)),
+          };
+        });
         closeModal();
-        toast.info('Saved offline', 'Task update will sync when you reconnect.');
+        toast.info('Updated offline', 'Task update will sync when you come back online.');
         return;
       }
       toast.error(t('errorGeneric'), t('couldNotUpdateTask'));
@@ -291,10 +355,17 @@ export default function CalendarScreen() {
         buildPayload: () => ({ id: Number(id), taskId: Number(id), completed }),
       }),
     onSuccess: () => invalidate(),
-    onError: (err) => {
+    onError: (err, vars) => {
       if (isOfflineQueuedError(err)) {
-        invalidate();
-        toast.info('Queued offline', 'Task status will sync when you reconnect.');
+        queryClient.setQueryData<CalendarResponse>(['calendar', selectedDate], (prev) => {
+          if (!prev) return prev;
+          const mapTask = (t: CalendarTask) =>
+            t.id === vars.id
+              ? { ...t, completed: vars.completed, completedAt: vars.completed ? new Date().toISOString() : null }
+              : t;
+          return { ...prev, tasks: prev.tasks.map(mapTask), dayPlan: prev.dayPlan.map(mapTask) };
+        });
+        toast.info('Queued offline', 'Task status will sync when you come back online.');
       }
     },
   });
@@ -311,11 +382,18 @@ export default function CalendarScreen() {
       setDeleteTarget(null);
       toast.success(t('deleted'), t('taskRemoved'));
     },
-    onError: (err) => {
+    onError: (err, id) => {
       if (isOfflineQueuedError(err)) {
-        invalidate();
+        queryClient.setQueryData<CalendarResponse>(['calendar', selectedDate], (prev) => {
+          if (!prev) return prev;
+          return {
+            ...prev,
+            tasks: prev.tasks.filter((t) => t.id !== id),
+            dayPlan: prev.dayPlan.filter((t) => t.id !== id),
+          };
+        });
         setDeleteTarget(null);
-        toast.info('Queued offline', 'Task delete will sync when you reconnect.');
+        toast.info('Queued offline', 'Task delete will sync when you come back online.');
         return;
       }
       toast.error(t('errorGeneric'), t('couldNotDeleteTask'));
