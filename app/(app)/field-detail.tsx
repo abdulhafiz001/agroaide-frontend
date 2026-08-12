@@ -14,8 +14,10 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import styled, { useTheme } from '@/design-system/styled';
 
 import { ConfirmModal } from '@/components/ConfirmModal';
+import { DatePickerField } from '@/components/DatePickerField';
 import { FarmMapView, type FarmMapViewHandle } from '@/components/FarmMapView';
 import { FormattedMessage } from '@/components/FormattedMessage';
+import { HarvestCompleteModal } from '@/components/HarvestCompleteModal';
 import { useToast } from '@/components/Toast';
 import { Button, Chip, InputField, Surface, Text } from '@/design-system/components';
 import { useTranslation } from '@/i18n/useTranslation';
@@ -59,7 +61,13 @@ export default function FieldDetailScreen() {
   const token = useAppStore((s) => s.accessToken) ?? '';
   const queryClient = useQueryClient();
   const mapRef = useRef<FarmMapViewHandle>(null);
-  const { fieldId, fieldName } = useLocalSearchParams<{ fieldId: string; fieldName?: string }>();
+  const { fieldId, fieldName, openHarvest } = useLocalSearchParams<{
+    fieldId: string;
+    fieldName?: string;
+    openHarvest?: string;
+  }>();
+  const profileCrops = useAppStore((s) => s.farmerProfile?.crops ?? []);
+  const [harvestModalMode, setHarvestModalMode] = useState<'harvest' | 'plan'>('harvest');
 
   const [boundaryMenu, setBoundaryMenu] = useState(false);
   const [showCalc, setShowCalc] = useState(false);
@@ -69,6 +77,9 @@ export default function FieldDetailScreen() {
   const [calcStep, setCalcStep] = useState(0);
   const [estimateToDelete, setEstimateToDelete] = useState<string | null>(null);
   const [plantedAtDraft, setPlantedAtDraft] = useState('');
+  const [showPlantingSection, setShowPlantingSection] = useState(false);
+  const [showHarvestModal, setShowHarvestModal] = useState(false);
+  const [shouldPromptRating, setShouldPromptRating] = useState(true);
 
   const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ['fieldDetail', fieldId],
@@ -115,6 +126,55 @@ export default function FieldDetailScreen() {
       toast.error('Update failed', message);
     },
   });
+
+  const harvestMutation = useMutation({
+    mutationFn: (payload: {
+      harvestedAt: string;
+      yieldNote?: string;
+      plannedNextCrop?: string;
+      plannedPlantAt?: string;
+    }) => farmApi.markHarvested(token, String(fieldId), payload),
+    onSuccess: (res) => {
+      setShouldPromptRating(Boolean(res.shouldPromptRating));
+      queryClient.invalidateQueries({ queryKey: ['fieldDetail', fieldId] });
+      queryClient.invalidateQueries({ queryKey: ['farmOverview'] });
+      queryClient.invalidateQueries({ queryKey: ['calendar'] });
+      toast.success('Harvest recorded', res.message);
+    },
+    onError: (err) => {
+      const message = err instanceof ApiError ? err.message : 'Could not record harvest.';
+      toast.error('Harvest failed', message);
+    },
+  });
+
+  const ratingMutation = useMutation({
+    mutationFn: (payload: { stars: number; comment?: string } | { dismissed: true }) =>
+      farmApi.submitAppRating(token, 'dismissed' in payload ? payload : { ...payload, source: 'post_harvest' }),
+    onSuccess: () => {
+      toast.success('Thanks', 'Your feedback was saved.');
+    },
+  });
+
+  const planNextMutation = useMutation({
+    mutationFn: (payload: { plannedNextCrop: string; plannedPlantAt: string }) =>
+      farmApi.planNextCrop(token, String(fieldId), payload),
+    onSuccess: (res) => {
+      queryClient.invalidateQueries({ queryKey: ['fieldDetail', fieldId] });
+      queryClient.invalidateQueries({ queryKey: ['farmOverview'] });
+      toast.success('Next crop planned', res.message);
+    },
+    onError: (err) => {
+      const message = err instanceof ApiError ? err.message : 'Could not save next crop plan.';
+      toast.error('Plan failed', message);
+    },
+  });
+
+  useEffect(() => {
+    if (openHarvest === '1') {
+      setHarvestModalMode('harvest');
+      setShowHarvestModal(true);
+    }
+  }, [openHarvest]);
 
   const { data: cropMarket } = useQuery({
     queryKey: ['marketIntel', field?.crop],
@@ -271,48 +331,110 @@ export default function FieldDetailScreen() {
               </View>
 
               <Surface variant="muted" style={{ marginTop: 8, padding: 12, borderRadius: 12, gap: 8 }}>
-                <Text variant="caption" tone="accent">
-                  Planting & harvest
-                </Text>
-                <InputField
-                  label="Planting start date (YYYY-MM-DD)"
-                  value={plantedAtDraft}
-                  onChangeText={setPlantedAtDraft}
-                  placeholder="2026-07-01"
-                  autoCapitalize="none"
-                />
-                {field.harvestStartDate ? (
-                  <Text variant="caption" tone="muted">
-                    AI harvest window: {field.harvestStartDate}
-                    {field.harvestEndDate ? ` to ${field.harvestEndDate}` : ''}
+                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                  <Text variant="caption" tone="accent">
+                    Planting & harvest
                   </Text>
-                ) : (
-                  <Text variant="caption" tone="muted">
-                    Save a planting date to get a harvest estimate on your calendar.
-                  </Text>
-                )}
-                <View style={{ flexDirection: 'row', gap: 8, flexWrap: 'wrap' }}>
-                  <Button
-                    label="Save planting date"
-                    onPress={() => savePlantedMutation.mutate()}
-                    loading={savePlantedMutation.isPending}
-                    disabled={!/^\d{4}-\d{2}-\d{2}$/.test(plantedAtDraft.trim())}
-                    style={{ flexGrow: 1 }}
+                  <Chip
+                    label={showPlantingSection ? 'Close' : 'Edit'}
+                    tone={showPlantingSection ? 'danger' : 'info'}
+                    onPress={() => setShowPlantingSection((v) => !v)}
                   />
-                  {field.harvestStartDate ? (
-                    <Button
-                      label="See calendar"
-                      variant="secondary"
-                      onPress={() =>
-                        router.push({
-                          pathname: '/(app)/(tabs)/calendar',
-                          params: { focusDate: field.harvestStartDate!, focusCrop: field.crop },
-                        })
-                      }
-                      style={{ flexGrow: 1 }}
-                    />
-                  ) : null}
                 </View>
+                {!showPlantingSection ? (
+                  <View style={{ gap: 8 }}>
+                    <Text variant="body">
+                      {field.harvestedAt
+                        ? `Last harvested: ${field.harvestedAt} (${field.crop})`
+                        : field.plantedAt
+                          ? `Planted: ${String(field.plantedAt).slice(0, 10)}`
+                          : 'No planting date set yet'}
+                    </Text>
+                    {field.plannedNextCrop && field.plannedPlantAt ? (
+                      <Text variant="caption" tone="muted">
+                        Next: {field.plannedNextCrop} · plant by {field.plannedPlantAt}
+                      </Text>
+                    ) : null}
+                    {field.yieldNote ? (
+                      <Text variant="caption" tone="muted">
+                        Yield note: {field.yieldNote}
+                      </Text>
+                    ) : null}
+                    {field.harvestStartDate && !field.harvestedAt ? (
+                      <Text variant="caption" tone="muted">
+                        Harvest window: {field.harvestStartDate}
+                        {field.harvestEndDate ? ` to ${field.harvestEndDate}` : ''}
+                      </Text>
+                    ) : !field.plantedAt ? (
+                      <Text variant="caption" tone="muted">
+                        Tap Edit to add a planting date and get a harvest estimate.
+                      </Text>
+                    ) : null}
+                    {field.canMarkHarvested !== false && field.plantedAt && !field.harvestedAt ? (
+                      <Button
+                        label={field.harvestWindowActive ? 'Crop harvested ✓' : 'Mark as harvested'}
+                        variant={field.harvestWindowActive ? 'primary' : 'secondary'}
+                        onPress={() => {
+                          setHarvestModalMode('harvest');
+                          setShowHarvestModal(true);
+                        }}
+                        fullWidth
+                      />
+                    ) : null}
+                    {field.harvestedAt && !field.plannedNextCrop ? (
+                      <Button
+                        label="Plan next crop"
+                        variant="secondary"
+                        onPress={() => {
+                          setHarvestModalMode('plan');
+                          setShowHarvestModal(true);
+                        }}
+                        fullWidth
+                      />
+                    ) : null}
+                  </View>
+                ) : (
+                  <View style={{ gap: 8 }}>
+                    <DatePickerField
+                      label="Planting start date"
+                      value={plantedAtDraft || ''}
+                      onChange={setPlantedAtDraft}
+                      maximumDate={new Date()}
+                    />
+                    {field.harvestStartDate ? (
+                      <Text variant="caption" tone="muted">
+                        AI harvest window: {field.harvestStartDate}
+                        {field.harvestEndDate ? ` to ${field.harvestEndDate}` : ''}
+                      </Text>
+                    ) : (
+                      <Text variant="caption" tone="muted">
+                        Save a planting date to get a harvest estimate on your calendar.
+                      </Text>
+                    )}
+                    <View style={{ flexDirection: 'row', gap: 8, flexWrap: 'wrap' }}>
+                      <Button
+                        label="Save planting date"
+                        onPress={() => savePlantedMutation.mutate()}
+                        loading={savePlantedMutation.isPending}
+                        disabled={!/^\d{4}-\d{2}-\d{2}$/.test(plantedAtDraft.trim())}
+                        style={{ flexGrow: 1 }}
+                      />
+                      {field.harvestStartDate ? (
+                        <Button
+                          label="See calendar"
+                          variant="secondary"
+                          onPress={() =>
+                            router.push({
+                              pathname: '/(app)/(tabs)/calendar',
+                              params: { focusDate: field.harvestStartDate!, focusCrop: field.crop },
+                            })
+                          }
+                          style={{ flexGrow: 1 }}
+                        />
+                      ) : null}
+                    </View>
+                  </View>
+                )}
               </Surface>
 
               {cropPrice ? (
@@ -644,6 +766,28 @@ export default function FieldDetailScreen() {
         onConfirm={() => {
           if (estimateToDelete) deleteEstimateMutation.mutate(estimateToDelete);
         }}
+      />
+
+      <HarvestCompleteModal
+        visible={showHarvestModal}
+        mode={harvestModalMode}
+        fieldName={field?.name || fieldName || 'Field'}
+        crop={field?.crop || 'Crop'}
+        profileCrops={profileCrops}
+        submitting={harvestMutation.isPending || planNextMutation.isPending}
+        ratingSubmitting={ratingMutation.isPending}
+        shouldPromptRating={shouldPromptRating}
+        onHarvest={async (payload) => {
+          const res = await harvestMutation.mutateAsync(payload);
+          return { shouldPromptRating: res.shouldPromptRating };
+        }}
+        onPlanNextOnly={async (payload) => {
+          await planNextMutation.mutateAsync(payload);
+        }}
+        onRate={async (payload) => {
+          await ratingMutation.mutateAsync(payload);
+        }}
+        onClose={() => setShowHarvestModal(false)}
       />
     </Screen>
   );

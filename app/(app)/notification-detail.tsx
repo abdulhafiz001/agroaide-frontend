@@ -129,17 +129,35 @@ export default function NotificationDetailScreen() {
         ) : null}
 
         {params.fieldId ? (
-          <Button
-            label="Open field"
-            variant="secondary"
-            onPress={() =>
-              router.push({
-                pathname: '/(app)/field-detail',
-                params: { fieldId: String(params.fieldId), fieldName: String(params.crop || 'Field') },
-              })
-            }
-            fullWidth
-          />
+          <>
+            {isHarvest ? (
+              <Button
+                label="Mark crop harvested"
+                onPress={() =>
+                  router.push({
+                    pathname: '/(app)/field-detail',
+                    params: {
+                      fieldId: String(params.fieldId),
+                      fieldName: String(params.crop || 'Field'),
+                      openHarvest: '1',
+                    },
+                  })
+                }
+                fullWidth
+              />
+            ) : null}
+            <Button
+              label="Open field"
+              variant="secondary"
+              onPress={() =>
+                router.push({
+                  pathname: '/(app)/field-detail',
+                  params: { fieldId: String(params.fieldId), fieldName: String(params.crop || 'Field') },
+                })
+              }
+              fullWidth
+            />
+          </>
         ) : null}
 
         <Button

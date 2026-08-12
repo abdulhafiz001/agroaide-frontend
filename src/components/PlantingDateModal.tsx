@@ -1,8 +1,16 @@
 import React, { useState } from 'react';
-import { Modal, Platform, ScrollView, TouchableOpacity, View } from 'react-native';
+import {
+  KeyboardAvoidingView,
+  Modal,
+  Platform,
+  ScrollView,
+  TouchableOpacity,
+  View,
+} from 'react-native';
 import styled, { useTheme } from '@/design-system/styled';
 
-import { Button, InputField, Surface, Text } from '@/design-system/components';
+import { DatePickerField } from '@/components/DatePickerField';
+import { Button, Surface, Text } from '@/design-system/components';
 
 export type PlantingPromptField = {
   id: string;
@@ -52,59 +60,64 @@ export function PlantingDateModal({ visible, fields, submitting, onSubmit, onDis
 
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onDismiss}>
-      <ModalOverlay>
-        <TouchableOpacity style={{ flex: 1 }} activeOpacity={1} onPress={onDismiss} />
-        <ModalContent>
-          <Text variant="headline">When did you plant?</Text>
-          <Text variant="body" tone="muted">
-            Tell us the planting date for each crop so your AI advisor can estimate harvest windows and remind you.
-          </Text>
+      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+        <ModalOverlay>
+          <TouchableOpacity style={{ flex: 1 }} activeOpacity={1} onPress={onDismiss} />
+          <ModalContent>
+            <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+              <View style={{ gap: 14 }}>
+                <Text variant="headline">When did you plant?</Text>
+                <Text variant="body" tone="muted">
+                  Tell us the planting date for each crop so your AI advisor can estimate harvest windows and remind
+                  you.
+                </Text>
 
-          <ScrollView style={{ maxHeight: 160 }} contentContainerStyle={{ gap: 8 }}>
-            {fields.map((field) => {
-              const selected = field.id === activeId;
-              return (
-                <TouchableOpacity
-                  key={field.id}
-                  onPress={() => setSelectedId(field.id)}
-                  style={{
-                    padding: 12,
-                    borderRadius: 12,
-                    borderWidth: 1,
-                    borderColor: selected ? theme.colors.primary : theme.colors.border,
-                    backgroundColor: selected ? `${theme.colors.primary}14` : theme.colors.surface,
-                  }}>
-                  <Text variant="headline" style={{ fontSize: 16 }}>
-                    {field.name}
-                  </Text>
-                  <Text variant="caption" tone="muted">
-                    {field.crop}
-                  </Text>
-                </TouchableOpacity>
-              );
-            })}
-          </ScrollView>
+                <View style={{ gap: 8, maxHeight: 160 }}>
+                  {fields.map((field) => {
+                    const selected = field.id === activeId;
+                    return (
+                      <TouchableOpacity
+                        key={field.id}
+                        onPress={() => setSelectedId(field.id)}
+                        style={{
+                          padding: 12,
+                          borderRadius: 12,
+                          borderWidth: 1,
+                          borderColor: selected ? theme.colors.primary : theme.colors.border,
+                          backgroundColor: selected ? `${theme.colors.primary}14` : theme.colors.surface,
+                        }}>
+                        <Text variant="headline" style={{ fontSize: 16 }}>
+                          {field.name}
+                        </Text>
+                        <Text variant="caption" tone="muted">
+                          {field.crop}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
 
-          <InputField
-            label="Planting date (YYYY-MM-DD)"
-            value={plantedAt}
-            onChangeText={setPlantedAt}
-            placeholder={todayIsoDate()}
-            autoCapitalize="none"
-            keyboardType={Platform.OS === 'ios' ? 'numbers-and-punctuation' : 'default'}
-          />
+                <DatePickerField
+                  label="Planting date"
+                  value={plantedAt}
+                  onChange={setPlantedAt}
+                  maximumDate={new Date()}
+                />
 
-          <Button
-            label={active ? `Save date for ${active.name}` : 'Save planting date'}
-            loading={submitting}
-            disabled={!activeId || !/^\d{4}-\d{2}-\d{2}$/.test(plantedAt)}
-            onPress={() => activeId && onSubmit(activeId, plantedAt)}
-            fullWidth
-          />
-          <Button label="Ask me later today" variant="ghost" onPress={onDismiss} fullWidth />
-          <View style={{ height: 8 }} />
-        </ModalContent>
-      </ModalOverlay>
+                <Button
+                  label={active ? `Save date for ${active.name}` : 'Save planting date'}
+                  loading={submitting}
+                  disabled={!activeId || !/^\d{4}-\d{2}-\d{2}$/.test(plantedAt)}
+                  onPress={() => activeId && onSubmit(activeId, plantedAt)}
+                  fullWidth
+                />
+                <Button label="Ask me later today" variant="ghost" onPress={onDismiss} fullWidth />
+                <View style={{ height: 8 }} />
+              </View>
+            </ScrollView>
+          </ModalContent>
+        </ModalOverlay>
+      </KeyboardAvoidingView>
     </Modal>
   );
 }

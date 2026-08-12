@@ -79,6 +79,7 @@ const config = {
         defaultChannel: 'default',
       },
     ],
+    '@react-native-community/datetimepicker',
     [
       'expo-location',
       {

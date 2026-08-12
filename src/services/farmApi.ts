@@ -36,6 +36,12 @@ export type FarmField = {
   plantedAt: string | null;
   harvestStartDate?: string | null;
   harvestEndDate?: string | null;
+  harvestedAt?: string | null;
+  yieldNote?: string | null;
+  plannedNextCrop?: string | null;
+  plannedPlantAt?: string | null;
+  harvestWindowActive?: boolean;
+  canMarkHarvested?: boolean;
   boundaryGeojson?: GeoJSON.Polygon | null;
   hasMeasuredBoundary?: boolean;
   totalExpense?: number;
@@ -162,6 +168,46 @@ export const farmApi = {
       method: 'POST',
       token,
       body: { plantedAt },
+    });
+  },
+
+  markHarvested(
+    token: string,
+    fieldId: string,
+    payload: {
+      harvestedAt: string;
+      yieldNote?: string;
+      plannedNextCrop?: string;
+      plannedPlantAt?: string;
+    },
+  ) {
+    return apiRequest<{
+      message: string;
+      field: FarmField;
+      shouldPromptRating: boolean;
+    }>(`/farm/fields/${fieldId}/harvest`, {
+      method: 'POST',
+      token,
+      body: payload,
+    });
+  },
+
+  planNextCrop(token: string, fieldId: string, payload: { plannedNextCrop: string; plannedPlantAt: string }) {
+    return apiRequest<{ message: string; field: FarmField }>(`/farm/fields/${fieldId}/plan-next-crop`, {
+      method: 'POST',
+      token,
+      body: payload,
+    });
+  },
+
+  submitAppRating(
+    token: string,
+    payload: { stars: number; comment?: string; source?: string } | { dismissed: true },
+  ) {
+    return apiRequest<{ message: string; shouldPromptRating: boolean }>('/app/ratings', {
+      method: 'POST',
+      token,
+      body: payload,
     });
   },
 

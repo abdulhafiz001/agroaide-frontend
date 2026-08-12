@@ -27,11 +27,18 @@ function setupNotificationHandler() {
 
 setupNotificationHandler();
 
+async function sleep(ms: number) {
+  await new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 async function registerForPushNotifications(): Promise<string | null> {
   if (isExpoGo) return null;
 
   try {
-    if (!Device.isDevice) return null;
+    if (!Device.isDevice) {
+      console.warn('[push] skipped — not a physical device');
+      return null;
+    }
 
     const { status: existingStatus } = await Notifications.getPermissionsAsync();
     let finalStatus = existingStatus;
@@ -41,7 +48,10 @@ async function registerForPushNotifications(): Promise<string | null> {
       finalStatus = status;
     }
 
-    if (finalStatus !== 'granted') return null;
+    if (finalStatus !== 'granted') {
+      console.warn('[push] permission not granted:', finalStatus);
+      return null;
+    }
 
     if (Platform.OS === 'android') {
       await Notifications.setNotificationChannelAsync('default', {
@@ -53,9 +63,25 @@ async function registerForPushNotifications(): Promise<string | null> {
     }
 
     // Native FCM (Android) / APNs (iOS) token for direct FCM HTTP v1
-    const deviceToken = await Notifications.getDevicePushTokenAsync();
-    return typeof deviceToken?.data === 'string' ? deviceToken.data : null;
-  } catch {
+    let lastError: unknown = null;
+    for (let attempt = 1; attempt <= 3; attempt += 1) {
+      try {
+        const deviceToken = await Notifications.getDevicePushTokenAsync();
+        if (typeof deviceToken?.data === 'string' && deviceToken.data.length > 0) {
+          return deviceToken.data;
+        }
+        lastError = new Error('empty device token');
+      } catch (error) {
+        lastError = error;
+        console.warn(`[push] getDevicePushTokenAsync attempt ${attempt} failed`, error);
+        await sleep(800 * attempt);
+      }
+    }
+
+    console.warn('[push] could not obtain device token', lastError);
+    return null;
+  } catch (error) {
+    console.warn('[push] registerForPushNotifications failed', error);
     return null;
   }
 }
@@ -79,7 +105,6 @@ export function usePushNotifications() {
   const router = useRouter();
   const accessToken = useAppStore((s) => s.accessToken);
   const authStatus = useAppStore((s) => s.authStatus);
-  const notificationPreferences = useAppStore((s) => s.notificationPreferences);
   const responseListener = useRef<any>(null);
   const handledColdStartRef = useRef(false);
 
@@ -87,21 +112,20 @@ export function usePushNotifications() {
     if (authStatus !== 'authenticated' || !accessToken) return;
     if (isExpoGo) return;
 
-    registerForPushNotifications().then(async (pushToken) => {
+    let cancelled = false;
+
+    (async () => {
+      const pushToken = await registerForPushNotifications();
+      if (cancelled || !pushToken) return;
+
       try {
-        await authApi.updateProfile(accessToken, {
-          ...(pushToken ? { pushToken } : {}),
-          notificationPreferences,
-        });
-        if (pushToken) {
-          console.info('[push] device token registered with backend');
-        } else {
-          console.warn('[push] no device token (permission denied or not a physical device build)');
-        }
+        // Dedicated endpoint — not blocked by consent.current (428 on /profile).
+        await authApi.registerPushToken(accessToken, pushToken, Platform.OS);
+        console.info('[push] device token registered with backend');
       } catch (e) {
         console.warn('[push] failed to upload token', e);
       }
-    });
+    })();
 
     let receivedSub: { remove: () => void } | null = null;
 
@@ -135,11 +159,12 @@ export function usePushNotifications() {
     queryClient.invalidateQueries({ queryKey: ['notifications'] });
 
     return () => {
+      cancelled = true;
       clearInterval(pollId);
       receivedSub?.remove();
       if (responseListener.current) {
         responseListener.current.remove();
       }
     };
-  }, [authStatus, accessToken, router, notificationPreferences]);
+  }, [authStatus, accessToken, router]);
 }

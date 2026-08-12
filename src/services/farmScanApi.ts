@@ -52,6 +52,8 @@ export type ScanHistoryItem = {
   summary?: string;
   confidencePercent?: number | null;
   imagePath?: string | null;
+  imageUrl?: string | null;
+  imagePublicId?: string | null;
   status?: ScanVerificationStatus;
   verificationStatus?: ScanVerificationStatus;
   processingState?: 'queued' | 'processing' | 'completed' | 'failed';

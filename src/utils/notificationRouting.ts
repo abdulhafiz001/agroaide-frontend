@@ -24,6 +24,7 @@ export function routeForNotification(
     'planting_reminder',
     'harvest_estimate',
     'harvest_reminder',
+    'next_plant_reminder',
   ]);
 
   if (type && detailTypes.has(type)) {

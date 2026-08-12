@@ -84,6 +84,14 @@ export const authApi = {
     });
   },
 
+  registerPushToken(token: string, pushToken: string, platform?: string) {
+    return apiRequest<{ message: string; hasPushToken: boolean }>('/auth/push-token', {
+      method: 'POST',
+      token,
+      body: { pushToken, platform },
+    });
+  },
+
   changePassword(token: string, payload: { currentPassword: string; newPassword: string; newPassword_confirmation: string }) {
     return apiRequest<{ message: string }>('/auth/change-password', {
       method: 'POST',
