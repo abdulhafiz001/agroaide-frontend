@@ -13,6 +13,8 @@ minimumReleaseAgeExclude:
   - brace-expansion@5.0.9
   - brace-expansion@2.1.4
   - brace-expansion@1.1.18
+  - nanoid@3.3.17
+  - nanoid@5.0.9
 overrides:
   brace-expansion@<1.1.18: ^1.1.18
   brace-expansion@>=2.0.0 <2.1.4: ^2.1.4
@@ -25,3 +27,11 @@ overrides:
   tar@<=7.5.20: ^7.5.21
   undici@<6.28.0: ^6.28.0
   uuid@<11.1.1: ^11.1.1
+  nanoid@<3.3.17: 3.3.17
+  nanoid@>=4.0.0 <5.0.9: 5.0.9
+auditConfig:
+  # image-size 2.0.3 is referenced by GHSA but has never been published (latest is 2.0.2).
+  # Transitive Metro/Expo CLI dep only — not farmer-facing image parsing.
+  ignoreGhsas:
+    - GHSA-w3rx-r6r6-pgpr
+    - GHSA-5p2g-fcmc-qvqq
