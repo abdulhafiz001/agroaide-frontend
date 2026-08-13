@@ -1,0 +1,46 @@
+# EAS Build upload rules.
+# When this file exists it REPLACES .gitignore for deciding what gets uploaded,
+# so google-services.json ships to the build (required for FCM device tokens)
+# while staying untracked in git.
+
+node_modules/
+
+.expo/
+dist/
+web-build/
+expo-env.d.ts
+
+.kotlin/
+*.orig.*
+*.jks
+*.p8
+*.p12
+*.key
+*.mobileprovision
+
+.metro-health-check*
+
+npm-debug.*
+yarn-debug.*
+yarn-error.*
+
+.DS_Store
+*.pem
+
+# Local .env stays out so EAS environment variables win (a LAN API URL left in
+# .env would otherwise ship inside the APK).
+.env
+.env*.local
+
+*.tsbuildinfo
+
+app-example
+
+/ios
+/android
+
+GoogleService-Info.plist
+*-firebase-adminsdk-*.json
+service-account*.json
+*.keystore
+credentials.json

@@ -2,7 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'expo-router';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { KeyboardAvoidingView, Platform, Switch, TouchableOpacity, View } from 'react-native';
+import { KeyboardAvoidingView, Linking, Platform, Switch, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import styled, { useTheme } from '@/design-system/styled';
 
@@ -14,6 +14,8 @@ import { CropTagsInput } from '@/components/CropTagsInput';
 import { useToast } from '@/components/Toast';
 import { Button, Chip, InputField, Surface, Text } from '@/design-system/components';
 import { authApi } from '@/services/authApi';
+import { usePushRegistrationState } from '@/hooks/usePushNotifications';
+import { registerPushToken } from '@/services/pushRegistration';
 import { ThemePreference } from '@/design-system/theme';
 import { useAppStore, type NotificationPreferences } from '@/store/useAppStore';
 import { ApiError } from '@/services/apiClient';
@@ -134,6 +136,7 @@ export default function ProfileScreen() {
   const setOfflineMode = useAppStore((s) => s.setOfflineMode);
   const [pendingSyncCount, setPendingSyncCount] = useState(0);
   const [syncingNow, setSyncingNow] = useState(false);
+  const pushRegistration = usePushRegistrationState();
 
   const [editMode, setEditMode] = useState(false);
   const [editName, setEditName] = useState('');
@@ -614,6 +617,71 @@ export default function ProfileScreen() {
               }
             }}
           />
+        </Section>
+
+        {/* Push delivery diagnostics */}
+        <Section rounded="xl">
+          <Row>
+            <Text variant="headline">Push delivery</Text>
+            <Chip
+              label={
+                pushRegistration.status === 'registered'
+                  ? 'Active'
+                  : pushRegistration.status === 'registering'
+                    ? 'Checking'
+                    : pushRegistration.status === 'denied'
+                      ? 'Blocked'
+                      : pushRegistration.status === 'unsupported'
+                        ? 'Unavailable'
+                        : pushRegistration.status === 'error'
+                          ? 'Failed'
+                          : 'Unknown'
+              }
+              tone={
+                pushRegistration.status === 'registered'
+                  ? 'success'
+                  : pushRegistration.status === 'registering'
+                    ? 'info'
+                    : pushRegistration.status === 'idle'
+                      ? 'default'
+                      : 'danger'
+              }
+            />
+          </Row>
+          <Text variant="caption" tone="muted">
+            {pushRegistration.detail}
+          </Text>
+          {pushRegistration.tokenPreview ? (
+            <Text variant="caption" tone="muted">
+              Device token {pushRegistration.tokenPreview}
+            </Text>
+          ) : null}
+          <View style={{ flexDirection: 'row', gap: 8, flexWrap: 'wrap' }}>
+            <Button
+              label="Register this device"
+              variant="secondary"
+              loading={pushRegistration.status === 'registering'}
+              onPress={() => {
+                if (!accessToken) return;
+                void registerPushToken(accessToken).then((next) => {
+                  if (next.status === 'registered') {
+                    toast.success('Push enabled', 'This device can now receive notifications.');
+                  } else {
+                    toast.error('Push not enabled', next.detail);
+                  }
+                });
+              }}
+              style={{ flexGrow: 1 }}
+            />
+            {pushRegistration.status === 'denied' ? (
+              <Button
+                label="Open app settings"
+                variant="ghost"
+                onPress={() => Linking.openSettings()}
+                style={{ flexGrow: 1 }}
+              />
+            ) : null}
+          </View>
         </Section>
 
         {/* Notifications */}

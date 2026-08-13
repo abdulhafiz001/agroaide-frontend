@@ -1,7 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 
-/** Prefer EAS file env (uploaded secret); fall back to local gitignored file. */
+/** Prefer EAS file env (uploaded secret); fall back to the local untracked file. */
 function resolveGoogleServicesFile() {
   if (process.env.GOOGLE_SERVICES_JSON) {
     return process.env.GOOGLE_SERVICES_JSON;
@@ -14,6 +14,15 @@ function resolveGoogleServicesFile() {
 }
 
 const googleServicesFile = resolveGoogleServicesFile();
+
+// Without this file Firebase never initializes, getDevicePushTokenAsync() throws,
+// and the app silently ships with dead push notifications. Fail the build instead.
+if (!googleServicesFile && process.env.EAS_BUILD_PLATFORM === 'android') {
+  throw new Error(
+    'google-services.json is missing from the build context. Push notifications would not work. ' +
+      'Keep it listed in .easignore exceptions (it must NOT be excluded) or set the GOOGLE_SERVICES_JSON file env var in EAS.',
+  );
+}
 
 /** @type {import('expo/config').ExpoConfig} */
 const config = {
