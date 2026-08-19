@@ -11,6 +11,7 @@ import { Button, Text } from '@/design-system/components';
 import { notificationApi, type AppNotification } from '@/services/notificationApi';
 import { useAppStore } from '@/store/useAppStore';
 import { routeForNotification } from '@/utils/notificationRouting';
+import { sanitizeNotificationText } from '@/utils/sanitizeNotificationText';
 
 const Screen = styled(SafeAreaView)`
   flex: 1;
@@ -151,7 +152,7 @@ export default function NotificationsScreen() {
             )}
           </View>
           <Text variant="caption" tone="muted" numberOfLines={2}>
-            {item.message}
+            {sanitizeNotificationText(item.message, item.title)}
           </Text>
           <Text variant="caption" tone="muted" style={{ fontSize: 11 }}>
             {formatTime(item.createdAt)}

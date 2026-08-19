@@ -23,6 +23,13 @@ export const notificationApi = {
     });
   },
 
+  getOne(id: number, token: string) {
+    return apiRequest<{ notification: AppNotification }>(`/notifications/${id}`, {
+      method: 'GET',
+      token,
+    });
+  },
+
   markRead(id: number, token: string) {
     return apiRequest<{ message: string }>(`/notifications/${id}/read`, {
       method: 'PATCH',

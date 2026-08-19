@@ -107,9 +107,14 @@ export default function WeatherDetailScreen() {
           <Ionicons name="arrow-back" size={24} color={theme.colors.textPrimary} />
         </TouchableOpacity>
         <Ionicons name="partly-sunny" size={22} color={theme.colors.primary} />
-        <Text variant="title" style={{ flex: 1 }}>
-          Weather intelligence
-        </Text>
+        <View style={{ flex: 1 }}>
+          <Text variant="title">Weather intelligence</Text>
+          {data?.farmLocation ? (
+            <Text variant="caption" tone="muted" numberOfLines={1}>
+              Your farm · {data.farmLocation}
+            </Text>
+          ) : null}
+        </View>
         <TouchableOpacity onPress={() => refetch()} hitSlop={12}>
           <Ionicons name="refresh" size={20} color={theme.colors.textSecondary} />
         </TouchableOpacity>

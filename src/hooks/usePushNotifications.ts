@@ -39,6 +39,7 @@ function openFromNotification(router: ReturnType<typeof useRouter>, response: an
   const route = routeForNotification(String(data.type ?? ''), data, {
     title: content.title,
     message: content.body,
+    id: data.notificationId != null ? String(data.notificationId) : undefined,
   });
 
   if (route.params && Object.keys(route.params).length > 0) {

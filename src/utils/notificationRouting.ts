@@ -14,7 +14,14 @@ export function routeForNotification(
 ): NotificationRoute {
   const title = extras?.title ? String(extras.title) : undefined;
   const message = extras?.message ? String(extras.message) : undefined;
-  const id = extras?.id != null ? String(extras.id) : undefined;
+  const id =
+    extras?.id != null
+      ? String(extras.id)
+      : data?.notificationId != null
+        ? String(data.notificationId)
+        : data?.id != null
+          ? String(data.id)
+          : undefined;
 
   const detailTypes = new Set([
     'crop_watch_planting',
@@ -45,6 +52,8 @@ export function routeForNotification(
         ...(data?.harvestStart ? { harvestStart: String(data.harvestStart) } : {}),
         ...(data?.harvestEnd ? { harvestEnd: String(data.harvestEnd) } : {}),
         ...(data?.plantedAt ? { plantedAt: String(data.plantedAt) } : {}),
+        ...(data?.location ? { location: String(data.location) } : {}),
+        ...(data?.farmLocation ? { location: String(data.farmLocation) } : {}),
       },
     };
   }
@@ -82,6 +91,7 @@ export function routeForNotification(
           ...(title ? { title } : {}),
           ...(message ? { message } : {}),
           ...(data?.severity ? { severity: String(data.severity) } : {}),
+          ...(data?.farmLocation ? { farmLocation: String(data.farmLocation) } : {}),
         },
       };
     default:

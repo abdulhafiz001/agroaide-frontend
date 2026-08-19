@@ -1,6 +1,10 @@
 import { apiRequest } from '@/services/apiClient';
 
 export type WeatherForecastResponse = {
+  hasFarmLocation?: boolean;
+  farmLatitude?: number | null;
+  farmLongitude?: number | null;
+  farmLocation?: string | null;
   current: {
     temperature: number;
     humidity: number;

@@ -46,13 +46,21 @@ describe('routeForNotification', () => {
   it('routes crop watch planting alerts to notification detail', () => {
     const route = routeForNotification(
       'crop_watch_planting',
-      { crop: 'Maize', bestPlantDate: '2026-05-01', canSetReminder: true, watchId: 3 },
-      { title: 'Plant maize', message: 'Good window', id: 9 },
+      {
+        crop: 'Maize',
+        bestPlantDate: '2026-05-01',
+        canSetReminder: true,
+        watchId: 3,
+        notificationId: 9,
+        location: 'Abuja, FCT',
+      },
+      { title: 'Plant maize', message: 'Good window' },
     );
     assert.equal(route.pathname, '/(app)/notification-detail');
     assert.equal(route.params?.crop, 'Maize');
     assert.equal(route.params?.bestPlantDate, '2026-05-01');
     assert.equal(route.params?.id, '9');
+    assert.equal(route.params?.location, 'Abuja, FCT');
   });
 
   it('falls back to notifications list for unknown types', () => {

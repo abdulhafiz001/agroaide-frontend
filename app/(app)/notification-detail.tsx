@@ -1,16 +1,18 @@
 import { Ionicons } from '@expo/vector-icons';
-import { useMutation } from '@tanstack/react-query';
+import { useMutation, useQuery } from '@tanstack/react-query';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import React from 'react';
-import { ScrollView, TouchableOpacity } from 'react-native';
+import React, { useMemo } from 'react';
+import { ActivityIndicator, ScrollView, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import styled from '@/design-system/styled';
+import styled, { useTheme } from '@/design-system/styled';
 
 import { useToast } from '@/components/Toast';
 import { Button, Chip, Surface, Text } from '@/design-system/components';
 import { calendarApi } from '@/services/calendarApi';
+import { notificationApi } from '@/services/notificationApi';
 import { useAppStore } from '@/store/useAppStore';
 import { scheduleLocalPlantingReminders } from '@/utils/localPlantingReminders';
+import { sanitizeNotificationText } from '@/utils/sanitizeNotificationText';
 
 const Screen = styled(SafeAreaView)`
   flex: 1;
@@ -25,8 +27,21 @@ const HeaderBar = styled.View`
   background-color: ${({ theme }) => theme.colors.primary};
 `;
 
+function formatPlantDate(value?: string): string {
+  if (!value) return '';
+  const parsed = new Date(`${value}T00:00:00`);
+  if (Number.isNaN(parsed.getTime())) return value;
+  return parsed.toLocaleDateString(undefined, {
+    weekday: 'long',
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric',
+  });
+}
+
 export default function NotificationDetailScreen() {
   const router = useRouter();
+  const theme = useTheme();
   const toast = useToast();
   const token = useAppStore((s) => s.accessToken) ?? '';
   const params = useLocalSearchParams<{
@@ -43,22 +58,54 @@ export default function NotificationDetailScreen() {
     harvestStart?: string;
     harvestEnd?: string;
     plantedAt?: string;
+    location?: string;
   }>();
 
-  const canSetReminder = params.canSetReminder === 'true' || params.canSetReminder === '1';
-  const bestPlantDate = params.bestPlantDate;
-  const analysis = params.analysis;
-  const harvestStart = params.harvestStart;
-  const harvestEnd = params.harvestEnd;
-  const isHarvest = params.type === 'harvest_estimate' || params.type === 'harvest_reminder' || analysis === 'harvest_ready';
+  const notificationId = params.id ? Number(params.id) : NaN;
+
+  const { data, isLoading } = useQuery({
+    queryKey: ['notification', notificationId],
+    queryFn: () => notificationApi.getOne(notificationId, token),
+    enabled: Boolean(token && Number.isFinite(notificationId)),
+  });
+
+  const remote = data?.notification;
+  const remoteData = remote?.data ?? {};
+
+  const title = String(remote?.title || params.title || 'Alert');
+  const type = String(remote?.type || params.type || '');
+  const crop = String(remoteData.crop || params.crop || '');
+  const analysis = String(remoteData.analysis || params.analysis || '');
+  const location = String(remoteData.location || remoteData.farmLocation || params.location || '');
+  const bestPlantDate = String(remoteData.bestPlantDate || remoteData.plantOn || params.bestPlantDate || '');
+  const harvestStart = String(remoteData.harvestStart || params.harvestStart || '');
+  const harvestEnd = String(remoteData.harvestEnd || params.harvestEnd || '');
+  const plantedAt = String(remoteData.plantedAt || params.plantedAt || '');
+  const fieldId = String(remoteData.fieldId || params.fieldId || '');
+  const watchId = String(remoteData.watchId || params.watchId || '');
+  const canSetReminder =
+    remoteData.canSetReminder === true ||
+    remoteData.canSetReminder === 'true' ||
+    params.canSetReminder === 'true' ||
+    params.canSetReminder === '1';
+
+  const fallbackAdvice = useMemo(() => {
+    if (crop && bestPlantDate) {
+      return `Good time to plant ${crop}${location ? ` around ${location}` : ''}. Best planting date: ${formatPlantDate(bestPlantDate)}.`;
+    }
+    return title;
+  }, [bestPlantDate, crop, location, title]);
+
+  const message = sanitizeNotificationText(String(remote?.message || params.message || ''), fallbackAdvice);
+  const isHarvest = type === 'harvest_estimate' || type === 'harvest_reminder' || analysis === 'harvest_ready';
 
   const reminderMutation = useMutation({
     mutationFn: async () => {
       const res = await calendarApi.setPlantingReminder(token, {
-        notificationId: params.id ? Number(params.id) : undefined,
-        watchId: params.watchId ? Number(params.watchId) : undefined,
-        crop: String(params.crop || 'Crop'),
-        plantOn: String(bestPlantDate),
+        notificationId: Number.isFinite(notificationId) ? notificationId : undefined,
+        watchId: watchId ? Number(watchId) : undefined,
+        crop: crop || 'Crop',
+        plantOn: bestPlantDate,
       });
       await scheduleLocalPlantingReminders(res.localSchedule ?? []);
       return res;
@@ -81,25 +128,38 @@ export default function NotificationDetailScreen() {
       </HeaderBar>
 
       <ScrollView contentContainerStyle={{ padding: 16, gap: 14 }}>
-        <Surface rounded="xl" style={{ gap: 10 }}>
-          {params.crop ? <Chip label={String(params.crop)} tone="success" /> : null}
-          {analysis ? <Chip label={String(analysis).replace('_', ' ')} tone="info" /> : null}
-          <Text variant="headline">{params.title || 'Alert'}</Text>
-          <Text variant="body">{params.message || ''}</Text>
-          {bestPlantDate ? (
+        {isLoading ? (
+          <View style={{ paddingVertical: 24, alignItems: 'center' }}>
+            <ActivityIndicator size="large" color={theme.colors.primary} />
+          </View>
+        ) : null}
+
+        <Surface rounded="xl" style={{ gap: 12 }}>
+          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+            {crop ? <Chip label={crop} tone="success" /> : null}
+            {analysis ? <Chip label={String(analysis).replace(/_/g, ' ')} tone="info" /> : null}
+          </View>
+          <Text variant="headline">{title}</Text>
+          {location ? (
             <Text variant="caption" tone="muted">
-              Suggested planting date: {bestPlantDate}
+              For your farm near {location}
             </Text>
           ) : null}
-          {params.plantedAt ? (
+          <Text variant="body">{message}</Text>
+          {bestPlantDate ? (
             <Text variant="caption" tone="muted">
-              Planting date you entered: {String(params.plantedAt)}
+              Suggested planting date: {formatPlantDate(bestPlantDate)}
+            </Text>
+          ) : null}
+          {plantedAt ? (
+            <Text variant="caption" tone="muted">
+              Planting date you entered: {formatPlantDate(plantedAt)}
             </Text>
           ) : null}
           {harvestStart ? (
             <Text variant="caption" tone="muted">
-              Estimated harvest window: {String(harvestStart)}
-              {harvestEnd ? ` to ${String(harvestEnd)}` : ''}
+              Estimated harvest window: {formatPlantDate(harvestStart)}
+              {harvestEnd ? ` to ${formatPlantDate(harvestEnd)}` : ''}
             </Text>
           ) : null}
           {analysis === 'season_passed' ? (
@@ -128,7 +188,7 @@ export default function NotificationDetailScreen() {
           />
         ) : null}
 
-        {params.fieldId ? (
+        {fieldId ? (
           <>
             {isHarvest ? (
               <Button
@@ -137,8 +197,8 @@ export default function NotificationDetailScreen() {
                   router.push({
                     pathname: '/(app)/field-detail',
                     params: {
-                      fieldId: String(params.fieldId),
-                      fieldName: String(params.crop || 'Field'),
+                      fieldId,
+                      fieldName: crop || 'Field',
                       openHarvest: '1',
                     },
                   })
@@ -152,7 +212,7 @@ export default function NotificationDetailScreen() {
               onPress={() =>
                 router.push({
                   pathname: '/(app)/field-detail',
-                  params: { fieldId: String(params.fieldId), fieldName: String(params.crop || 'Field') },
+                  params: { fieldId, fieldName: crop || 'Field' },
                 })
               }
               fullWidth
@@ -167,8 +227,8 @@ export default function NotificationDetailScreen() {
             router.push({
               pathname: '/(app)/(tabs)/calendar',
               params: {
-                focusDate: String(harvestStart || bestPlantDate || ''),
-                focusCrop: String(params.crop || ''),
+                focusDate: harvestStart || bestPlantDate || '',
+                focusCrop: crop || '',
               },
             })
           }
