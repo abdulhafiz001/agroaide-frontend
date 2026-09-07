@@ -59,6 +59,8 @@ export default function NotificationDetailScreen() {
     harvestEnd?: string;
     plantedAt?: string;
     location?: string;
+    insightId?: string;
+    dayKey?: string;
   }>();
 
   const notificationId = params.id ? Number(params.id) : NaN;
@@ -89,6 +91,9 @@ export default function NotificationDetailScreen() {
     params.canSetReminder === 'true' ||
     params.canSetReminder === '1';
 
+  const isAi = type === 'ai_insight' || type === 'ai';
+  const isHarvest = type === 'harvest_estimate' || type === 'harvest_reminder' || analysis === 'harvest_ready';
+
   const fallbackAdvice = useMemo(() => {
     if (crop && bestPlantDate) {
       return `Good time to plant ${crop}${location ? ` around ${location}` : ''}. Best planting date: ${formatPlantDate(bestPlantDate)}.`;
@@ -97,7 +102,11 @@ export default function NotificationDetailScreen() {
   }, [bestPlantDate, crop, location, title]);
 
   const message = sanitizeNotificationText(String(remote?.message || params.message || ''), fallbackAdvice);
-  const isHarvest = type === 'harvest_estimate' || type === 'harvest_reminder' || analysis === 'harvest_ready';
+
+  const isWeatherRelated = useMemo(() => {
+    if (!isAi) return false;
+    return /rain|storm|weather|irrigate|water|heat|dry|sun|flood|wind/i.test(`${title} ${message}`);
+  }, [isAi, title, message]);
 
   const reminderMutation = useMutation({
     mutationFn: async () => {
@@ -123,7 +132,7 @@ export default function NotificationDetailScreen() {
           <Ionicons name="arrow-back" size={26} color="#fff" />
         </TouchableOpacity>
         <Text variant="headline" style={{ color: '#fff', fontWeight: '700', flex: 1 }}>
-          Notification
+          {isAi ? 'AI Farm Insight' : 'Notification'}
         </Text>
       </HeaderBar>
 
@@ -136,48 +145,99 @@ export default function NotificationDetailScreen() {
 
         <Surface rounded="xl" style={{ gap: 12 }}>
           <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+            {isAi ? <Chip label="AI Farm Insight" tone="accent" /> : null}
             {crop ? <Chip label={crop} tone="success" /> : null}
             {analysis ? <Chip label={String(analysis).replace(/_/g, ' ')} tone="info" /> : null}
           </View>
+
           <Text variant="headline">{title}</Text>
+
           {location ? (
             <Text variant="caption" tone="muted">
               For your farm near {location}
             </Text>
           ) : null}
-          <Text variant="body">{message}</Text>
+
+          <Text variant="body" style={{ lineHeight: 22 }}>
+            {message}
+          </Text>
+
           {bestPlantDate ? (
             <Text variant="caption" tone="muted">
               Suggested planting date: {formatPlantDate(bestPlantDate)}
             </Text>
           ) : null}
+
           {plantedAt ? (
             <Text variant="caption" tone="muted">
               Planting date you entered: {formatPlantDate(plantedAt)}
             </Text>
           ) : null}
+
           {harvestStart ? (
             <Text variant="caption" tone="muted">
               Estimated harvest window: {formatPlantDate(harvestStart)}
               {harvestEnd ? ` to ${formatPlantDate(harvestEnd)}` : ''}
             </Text>
           ) : null}
+
           {analysis === 'season_passed' ? (
             <Text variant="caption" tone="muted">
               This crop stays on your watch list for next year, but you cannot plant it again this season.
             </Text>
           ) : null}
+
           {analysis === 'invalid' ? (
             <Text variant="caption" tone="muted">
               We removed this entry from your crop watches because it did not look like a valid crop.
             </Text>
           ) : null}
+
           {isHarvest ? (
             <Text variant="caption" tone="muted">
-              Based on the planting date you entered, this is advice from your personalized AI advisor. Open the field to edit the start date, or open the calendar to see the estimated harvest days.
+              Based on your recorded planting date, this estimate helps you plan ahead. You can mark the crop as harvested when ready, or view the recommended days in your calendar.
+            </Text>
+          ) : null}
+
+          {isAi ? (
+            <Text variant="caption" tone="muted">
+              This recommendation is personalized for your farm using live microclimate rainfall forecasts, soil signals, your registered crops, and recent farm activities. Tap below to chat directly with your AI advisor about this recommendation.
             </Text>
           ) : null}
         </Surface>
+
+        {isAi ? (
+          <>
+            <Button
+              label="Ask AI advisor for more"
+              onPress={() =>
+                router.push({
+                  pathname: '/(app)/(tabs)/advisor',
+                  params: {
+                    prompt: `Tell me more about today's insight: "${title}" - ${message}. What specific steps should I take on my farm?`,
+                  },
+                })
+              }
+              fullWidth
+            />
+
+            {isWeatherRelated ? (
+              <Button
+                label="Check live weather"
+                variant="secondary"
+                onPress={() => router.push('/(app)/weather-detail')}
+                fullWidth
+              />
+            ) : null}
+
+            <Button
+              label="Open calendar"
+              variant="secondary"
+              onPress={() => router.push('/(app)/(tabs)/calendar')}
+              fullWidth
+            />
+          </>
+        ) : null}
 
         {canSetReminder && bestPlantDate ? (
           <Button
@@ -220,22 +280,24 @@ export default function NotificationDetailScreen() {
           </>
         ) : null}
 
-        <Button
-          label="Open calendar"
-          variant="secondary"
-          onPress={() =>
-            router.push({
-              pathname: '/(app)/(tabs)/calendar',
-              params: {
-                focusDate: harvestStart || bestPlantDate || '',
-                focusCrop: crop || '',
-              },
-            })
-          }
-          fullWidth
-        />
+        {!isAi ? (
+          <Button
+            label="Open calendar"
+            variant="secondary"
+            onPress={() =>
+              router.push({
+                pathname: '/(app)/(tabs)/calendar',
+                params: {
+                  focusDate: harvestStart || bestPlantDate || '',
+                  focusCrop: crop || '',
+                },
+              })
+            }
+            fullWidth
+          />
+        ) : null}
 
-        {isHarvest ? (
+        {!isAi && isHarvest ? (
           <Button
             label="Ask AI advisor"
             onPress={() => router.push('/(app)/(tabs)/advisor')}

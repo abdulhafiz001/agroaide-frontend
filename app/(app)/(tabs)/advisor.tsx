@@ -224,7 +224,7 @@ export default function ModernAdvisorScreen() {
   const theme = useTheme();
   const toast = useToast();
   const router = useRouter();
-  const params = useLocalSearchParams<{ scanId?: string }>();
+  const params = useLocalSearchParams<{ scanId?: string; prompt?: string; initialQuestion?: string }>();
   const insets = useSafeAreaInsets();
   const { t, lang } = useTranslation();
   const accessToken = useAppStore((state) => state.accessToken);
@@ -237,6 +237,7 @@ export default function ModernAdvisorScreen() {
   const recorderState = useAudioRecorderState(audioRecorder);
   const listRef = useRef<any>(null);
   const handledScanIdRef = useRef<string | null>(null);
+  const handledPromptRef = useRef<string | null>(null);
   const isRecordingRef = useRef(false);
   const voiceBusyRef = useRef(false);
   const lastPersonalDataRevision = useRef(personalDataRevision);
@@ -282,6 +283,11 @@ export default function ModernAdvisorScreen() {
   });
 
   const scanIdParam = params.scanId ? String(params.scanId) : null;
+  const promptParam = params.prompt
+    ? String(params.prompt)
+    : params.initialQuestion
+      ? String(params.initialQuestion)
+      : null;
 
   const scanQuery = useQuery({
     queryKey: ['advisorScanContext', scanIdParam],
@@ -301,6 +307,7 @@ export default function ModernAdvisorScreen() {
     setInput('');
     setActiveScan(null);
     handledScanIdRef.current = null;
+    handledPromptRef.current = null;
   }, [firstName, personalDataRevision]);
 
   useEffect(() => {
@@ -537,6 +544,16 @@ export default function ModernAdvisorScreen() {
     sendMessage(prompt);
     // eslint-disable-next-line react-hooks/exhaustive-deps -- once per scanId after history loads
   }, [activeScan, scanIdParam, historyLoaded]);
+
+  useEffect(() => {
+    if (!promptParam) return;
+    if (handledPromptRef.current === promptParam) return;
+    if (!historyLoaded) return;
+
+    handledPromptRef.current = promptParam;
+    sendMessage(promptParam);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- once per prompt after history loads
+  }, [promptParam, historyLoaded]);
 
   // Tab bar (~70) sits under the keyboard on Android; lift chat by the overlap only.
   const androidTabBar = 70;

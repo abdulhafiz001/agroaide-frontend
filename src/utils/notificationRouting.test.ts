@@ -63,6 +63,26 @@ describe('routeForNotification', () => {
     assert.equal(route.params?.location, 'Abuja, FCT');
   });
 
+  it('routes daily AI insights and AI advisory notifications to notification detail', () => {
+    const route = routeForNotification(
+      'ai_insight',
+      {
+        insightId: 'tip-1',
+        dayKey: '2026-09-07',
+        location: 'Kano, Nigeria',
+        crop: 'Cassava',
+      },
+      { id: 45, title: 'Rain expected tonight', message: 'Cover harvested produce.' },
+    );
+    assert.equal(route.pathname, '/(app)/notification-detail');
+    assert.equal(route.params?.id, '45');
+    assert.equal(route.params?.type, 'ai_insight');
+    assert.equal(route.params?.title, 'Rain expected tonight');
+    assert.equal(route.params?.message, 'Cover harvested produce.');
+    assert.equal(route.params?.crop, 'Cassava');
+    assert.equal(route.params?.location, 'Kano, Nigeria');
+  });
+
   it('falls back to notifications list for unknown types', () => {
     assert.equal(routeForNotification('unknown_type').pathname, '/(app)/notifications');
   });

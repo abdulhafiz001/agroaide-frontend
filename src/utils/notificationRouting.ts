@@ -24,6 +24,8 @@ export function routeForNotification(
           : undefined;
 
   const detailTypes = new Set([
+    'ai_insight',
+    'ai',
     'crop_watch_planting',
     'crop_watch_season_passed',
     'crop_watch_invalid',
@@ -54,6 +56,8 @@ export function routeForNotification(
         ...(data?.plantedAt ? { plantedAt: String(data.plantedAt) } : {}),
         ...(data?.location ? { location: String(data.location) } : {}),
         ...(data?.farmLocation ? { location: String(data.farmLocation) } : {}),
+        ...(data?.insightId ? { insightId: String(data.insightId) } : {}),
+        ...(data?.dayKey ? { dayKey: String(data.dayKey) } : {}),
       },
     };
   }
@@ -81,9 +85,6 @@ export function routeForNotification(
         pathname: '/(app)/farm-scan',
         params: data?.scanId ? { scanId: String(data.scanId) } : undefined,
       };
-    case 'ai_insight':
-    case 'ai':
-      return { pathname: '/(app)/(tabs)/advisor' };
     case 'weather':
       return {
         pathname: '/(app)/weather-detail',

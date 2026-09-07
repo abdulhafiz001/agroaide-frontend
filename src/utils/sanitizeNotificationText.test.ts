@@ -22,4 +22,15 @@ Suggested planting date: 2026-09-01`;
     const text = 'Good time to plant tomato around Abuja. Best date is 1 September 2026.';
     assert.equal(sanitizeNotificationText(text), text);
   });
+
+  it('strips technical harvest window markers and normalizes em dashes', () => {
+    const raw = 'Best days to harvest this crop — not a single-day deadline. [harvest-window:fieldId=5]';
+    const cleaned = sanitizeNotificationText(raw);
+    assert.equal(
+      cleaned,
+      'Best days to harvest this crop - not a single-day deadline.',
+    );
+    assert.ok(!cleaned.includes('[harvest-window:fieldId=5]'));
+    assert.ok(!cleaned.includes('—'));
+  });
 });

@@ -1,4 +1,4 @@
-/** Strip model thinking / prompt leakage before farmers see a notification. */
+/** Strip model thinking, technical markers, prompt leakage, and em-dashes before farmers see a notification. */
 export function sanitizeNotificationText(text: string, fallback = ''): string {
   let cleaned = String(text ?? '');
 
@@ -14,7 +14,16 @@ export function sanitizeNotificationText(text: string, fallback = ''): string {
     cleaned = afterFinal && !looksLikeReasoning(afterFinal) ? afterFinal : '';
   }
 
+  // Strip technical markers like [harvest-window:fieldId=5] or harvest-window:field=5
+  cleaned = cleaned.replace(/\[\s*harvest[-_]window(?::[^\]]*)?\]/gi, '');
+  cleaned = cleaned.replace(/harvest[-_]window:fieldId?=\d+/gi, '');
+  cleaned = cleaned.replace(/\[fieldId=\d+\]/gi, '');
+
+  // Normalize em-dashes (—) and en-dashes (–) to standard dashes
+  cleaned = cleaned.replace(/[—–]/g, '-');
+
   cleaned = cleaned.replace(/\n{3,}/g, '\n\n').trim();
+  cleaned = cleaned.replace(/[ \t]{2,}/g, ' ');
 
   return cleaned || fallback;
 }
