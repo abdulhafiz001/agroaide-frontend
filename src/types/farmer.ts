@@ -5,6 +5,8 @@ export interface FarmerProfile {
   id: string;
   fullName: string;
   email: string;
+  emailVerified?: boolean;
+  emailVerifiedAt?: string | null;
   phoneNumber: string;
   farmName: string;
   farmLocation: string;

@@ -83,7 +83,7 @@ const config = {
     [
       'expo-notifications',
       {
-        icon: './assets/images/agroaideLogo.png',
+        icon: './assets/images/agroaideNotificationLogo.png',
         color: '#57b346',
         defaultChannel: 'default',
       },

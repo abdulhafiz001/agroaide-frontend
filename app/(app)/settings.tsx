@@ -10,6 +10,7 @@ import * as Location from 'expo-location';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
 import { ConfirmModal } from '@/components/ConfirmModal';
+import { EmailVerificationModal } from '@/components/EmailVerificationModal';
 import { CropTagsInput } from '@/components/CropTagsInput';
 import { useToast } from '@/components/Toast';
 import { Button, Chip, InputField, Surface, Text } from '@/design-system/components';
@@ -27,6 +28,7 @@ import { countPendingSyncActions } from '@/services/syncEngine';
 import { runAppSync } from '@/services/appSync';
 import { clearAllSyncActions } from '@/services/syncQueue';
 import { authStorage } from '@/utils/authStorage';
+import { isValidPersonName, PERSON_NAME_ERROR } from '@/utils/validatePersonName';
 
 
 
@@ -150,6 +152,7 @@ export default function ProfileScreen() {
 
   const [showPasswordSection, setShowPasswordSection] = useState(false);
   const [showLegalSection, setShowLegalSection] = useState(false);
+  const [showEmailModal, setShowEmailModal] = useState(false);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
@@ -208,7 +211,7 @@ export default function ProfileScreen() {
   const updateProfileMutation = useMutation({
     mutationFn: () => {
       const payload: any = {
-        fullName: editName,
+        fullName: editName.trim(),
         email: editEmail,
         phoneNumber: editPhone || null,
         farmName: editFarmName || null,
@@ -419,7 +422,12 @@ export default function ProfileScreen() {
           </Row>
           {editMode ? (
             <View style={{ gap: 12 }}>
-              <InputField label="Full name" value={editName} onChangeText={setEditName} />
+              <InputField
+                label="Full name"
+                value={editName}
+                onChangeText={setEditName}
+                error={editName.trim() && !isValidPersonName(editName) ? PERSON_NAME_ERROR : undefined}
+              />
               <InputField label="Email" value={editEmail} onChangeText={setEditEmail} keyboardType="email-address" autoCapitalize="none" />
               <InputField label="Phone number" value={editPhone} onChangeText={setEditPhone} keyboardType="phone-pad" />
               <InputField label="Farm name" value={editFarmName} onChangeText={setEditFarmName} />
@@ -469,7 +477,13 @@ export default function ProfileScreen() {
               <InputField label="Soil type" value={editSoilType} onChangeText={setEditSoilType} />
               <Button
                 label="Save changes"
-                onPress={() => updateProfileMutation.mutate()}
+                onPress={() => {
+                  if (!isValidPersonName(editName)) {
+                    toast.error('Check your name', PERSON_NAME_ERROR);
+                    return;
+                  }
+                  updateProfileMutation.mutate();
+                }}
                 loading={updateProfileMutation.isPending}
                 fullWidth
               />
@@ -482,7 +496,14 @@ export default function ProfileScreen() {
               </Row>
               <Row>
                 <Text variant="caption" tone="muted">Email</Text>
-                <Text variant="body">{profile?.email}</Text>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flexShrink: 1, justifyContent: 'flex-end' }}>
+                  <Text variant="body" numberOfLines={1}>{profile?.email}</Text>
+                  {profile?.emailVerified ? (
+                    <Chip label="Verified" tone="success" />
+                  ) : (
+                    <Chip label="Verify now" tone="warning" onPress={() => setShowEmailModal(true)} />
+                  )}
+                </View>
               </Row>
               <Row>
                 <Text variant="caption" tone="muted">Phone</Text>
@@ -835,6 +856,11 @@ export default function ProfileScreen() {
           />
         </Surface>
       </ConfirmModal>
+
+      <EmailVerificationModal
+        visible={showEmailModal}
+        onClose={() => setShowEmailModal(false)}
+      />
     </Screen>
   );
 }

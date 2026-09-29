@@ -145,7 +145,7 @@ export default function NotificationDetailScreen() {
 
         <Surface rounded="xl" style={{ gap: 12 }}>
           <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
-            {isAi ? <Chip label="AI Farm Insight" tone="accent" /> : null}
+            {isAi ? <Chip label="AI Farm Insight" tone="info" /> : null}
             {crop ? <Chip label={crop} tone="success" /> : null}
             {analysis ? <Chip label={String(analysis).replace(/_/g, ' ')} tone="info" /> : null}
           </View>

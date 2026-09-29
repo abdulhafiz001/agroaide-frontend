@@ -32,6 +32,7 @@ import { isFarmProfileComplete } from '@/utils/farmProfile';
 import { formatSquareSidesFt } from '@/utils/formatters';
 import { clearAuthQueryCache } from '@/utils/queryClient';
 import { authStorage } from '@/utils/authStorage';
+import { isValidPersonName, normalizePersonName, PERSON_NAME_ERROR } from '@/utils/validatePersonName';
 
 const LOCATIONIQ_KEY = process.env.EXPO_PUBLIC_LOCATIONIQ_KEY || '';
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -151,6 +152,7 @@ export default function RegisterScreen() {
   const [form, setForm] = useState<RegistrationForm>(initialForm);
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [nameValidationVisible, setNameValidationVisible] = useState(false);
   const [emailValidationVisible, setEmailValidationVisible] = useState(false);
   const [passwordValidationVisible, setPasswordValidationVisible] = useState(false);
   const legalVersionsQuery = useQuery({
@@ -277,7 +279,7 @@ export default function RegisterScreen() {
       const crops = form.crops.length ? form.crops : undefined;
 
       return authApi.register({
-        fullName: form.fullName.trim(),
+        fullName: normalizePersonName(form.fullName),
         email: form.email.trim(),
         password: form.password,
         password_confirmation: form.passwordConfirmation,
@@ -321,11 +323,12 @@ export default function RegisterScreen() {
     },
   });
 
+  const nameIsValid = isValidPersonName(form.fullName);
   const canGoToStep2 = useMemo(() => {
     return Boolean(
-      form.fullName && form.email && form.password && form.passwordConfirmation && form.password === form.passwordConfirmation,
+      nameIsValid && form.email && form.password && form.passwordConfirmation && form.password === form.passwordConfirmation,
     );
-  }, [form.fullName, form.email, form.password, form.passwordConfirmation]);
+  }, [nameIsValid, form.email, form.password, form.passwordConfirmation]);
   const emailIsValid = EMAIL_PATTERN.test(form.email.trim());
   const passwordIsValid =
     form.password.length >= 8
@@ -334,8 +337,13 @@ export default function RegisterScreen() {
   const canCreateAccount = form.acceptedTerms && form.acceptedPrivacy;
 
   const continueFromAccountDetails = () => {
+    setNameValidationVisible(true);
     setEmailValidationVisible(true);
     setPasswordValidationVisible(true);
+    if (!nameIsValid) {
+      toast.error('Check your name', PERSON_NAME_ERROR);
+      return;
+    }
     if (!emailIsValid) {
       toast.error('Check your email', 'Enter a complete email address, such as name@example.com.');
       return;
@@ -357,7 +365,16 @@ export default function RegisterScreen() {
 
   const renderStep1 = () => (
     <Card rounded="xl">
-      <InputField label="Full name" value={form.fullName} onChangeText={(t) => updateForm('fullName', t)} />
+      <InputField
+        label="Full name"
+        value={form.fullName}
+        onChangeText={(t) => {
+          updateForm('fullName', t);
+          if (nameValidationVisible) setNameValidationVisible(false);
+        }}
+        autoComplete="name"
+        error={nameValidationVisible && !nameIsValid ? PERSON_NAME_ERROR : undefined}
+      />
       <InputField
         label="Email address"
         value={form.email}

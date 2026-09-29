@@ -25,6 +25,8 @@ import { useRouter } from 'expo-router';
 import styled, { useTheme } from '@/design-system/styled';
 
 
+import { EmailVerificationBanner } from '@/components/EmailVerificationBanner';
+import { EmailVerificationModal } from '@/components/EmailVerificationModal';
 import { OfflineBanner } from '@/components/OfflineBanner';
 import { PlantingDateModal } from '@/components/PlantingDateModal';
 import { useToast } from '@/components/Toast';
@@ -143,6 +145,8 @@ export default function Dashboard() {
   const [walkAfterSave, setWalkAfterSave] = useState(true);
   const [lastPulledAt, setLastPulledAt] = useState<string | null>(null);
   const [showPlantingModal, setShowPlantingModal] = useState(false);
+  const [showEmailModal, setShowEmailModal] = useState(false);
+  const [dismissEmailBanner, setDismissEmailBanner] = useState(false);
 
   const profileCrops = farmerProfile?.crops?.filter(Boolean) ?? [];
   const dashCacheKey = `dashboard:${userKey}`;
@@ -390,6 +394,12 @@ export default function Dashboard() {
     <Screen>
       <Container>
         <OfflineBanner visible={isOffline || (isError && Boolean(payload))} lastPulledAt={lastPulledAt} label="dashboard information" />
+        <EmailVerificationBanner
+          visible={Boolean(farmerProfile?.email && !farmerProfile?.emailVerified && !dismissEmailBanner)}
+          email={farmerProfile?.email}
+          onVerify={() => setShowEmailModal(true)}
+          onDismiss={() => setDismissEmailBanner(true)}
+        />
         <Header>
           <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
             <View>
@@ -863,6 +873,11 @@ export default function Dashboard() {
         submitting={recordPlantedMutation.isPending}
         onSubmit={(fieldId, plantedAt) => recordPlantedMutation.mutate({ fieldId, plantedAt })}
         onDismiss={() => dismissPlantingMutation.mutate()}
+      />
+
+      <EmailVerificationModal
+        visible={showEmailModal}
+        onClose={() => setShowEmailModal(false)}
       />
     </Screen>
   );

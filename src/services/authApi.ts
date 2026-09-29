@@ -92,6 +92,21 @@ export const authApi = {
     });
   },
 
+  sendEmailVerificationCode(token: string) {
+    return apiRequest<{ message: string; alreadyVerified?: boolean }>('/auth/email/send-code', {
+      method: 'POST',
+      token,
+    });
+  },
+
+  verifyEmail(token: string, code: string) {
+    return apiRequest<{ message: string; profile: FarmerProfile }>('/auth/email/verify', {
+      method: 'POST',
+      token,
+      body: { code },
+    });
+  },
+
   changePassword(token: string, payload: { currentPassword: string; newPassword: string; newPassword_confirmation: string }) {
     return apiRequest<{ message: string }>('/auth/change-password', {
       method: 'POST',
